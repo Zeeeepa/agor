@@ -1,12 +1,18 @@
+import type { Repo } from '@agor/core/types';
 import { Layout } from 'antd';
 import { useState } from 'react';
 import type { Agent, Board, Session, Task } from '../../types';
 import { AppHeader } from '../AppHeader';
 import { NewSessionButton } from '../NewSessionButton';
-import { type NewSessionConfig, NewSessionModal } from '../NewSessionModal';
+import {
+  type NewSessionConfig,
+  NewSessionModal,
+  type RepoReferenceOption,
+} from '../NewSessionModal';
 import { SessionCanvas } from '../SessionCanvas';
 import SessionDrawer from '../SessionDrawer';
 import { SessionListDrawer } from '../SessionListDrawer';
+import { SettingsModal } from '../SettingsModal';
 
 const { Content } = Layout;
 
@@ -15,6 +21,9 @@ export interface AppProps {
   tasks: Record<string, Task[]>;
   availableAgents: Agent[];
   boards: Board[];
+  repos: Repo[];
+  worktreeOptions: RepoReferenceOption[];
+  repoOptions: RepoReferenceOption[];
   initialBoardId?: string;
   onCreateSession?: (config: NewSessionConfig) => void;
   onForkSession?: (sessionId: string, prompt: string) => void;
@@ -22,7 +31,15 @@ export interface AppProps {
   onSendPrompt?: (sessionId: string, prompt: string) => void;
   onUpdateSession?: (sessionId: string, updates: Partial<Session>) => void;
   onDeleteSession?: (sessionId: string) => void;
-  onSettingsClick?: () => void;
+  onCreateBoard?: (board: Partial<Board>) => void;
+  onUpdateBoard?: (boardId: string, updates: Partial<Board>) => void;
+  onDeleteBoard?: (boardId: string) => void;
+  onDeleteRepo?: (repoId: string) => void;
+  onDeleteWorktree?: (repoId: string, worktreeName: string) => void;
+  onCreateWorktree?: (
+    repoId: string,
+    data: { name: string; ref: string; createBranch: boolean }
+  ) => void;
 }
 
 export const App: React.FC<AppProps> = ({
@@ -30,6 +47,9 @@ export const App: React.FC<AppProps> = ({
   tasks,
   availableAgents,
   boards,
+  repos,
+  worktreeOptions,
+  repoOptions,
   initialBoardId,
   onCreateSession,
   onForkSession,
@@ -37,11 +57,17 @@ export const App: React.FC<AppProps> = ({
   onSendPrompt,
   onUpdateSession,
   onDeleteSession,
-  onSettingsClick,
+  onCreateBoard,
+  onUpdateBoard,
+  onDeleteBoard,
+  onDeleteRepo,
+  onDeleteWorktree,
+  onCreateWorktree,
 }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [listDrawerOpen, setListDrawerOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [currentBoardId, setCurrentBoardId] = useState(initialBoardId || boards[0]?.board_id || '');
 
   const handleCreateSession = (config: NewSessionConfig) => {
@@ -85,7 +111,7 @@ export const App: React.FC<AppProps> = ({
     <Layout style={{ height: '100vh' }}>
       <AppHeader
         onMenuClick={() => setListDrawerOpen(true)}
-        onSettingsClick={onSettingsClick}
+        onSettingsClick={() => setSettingsOpen(true)}
         currentBoardName={currentBoard?.name}
         currentBoardIcon={currentBoard?.icon}
       />
@@ -104,6 +130,8 @@ export const App: React.FC<AppProps> = ({
         onClose={() => setModalOpen(false)}
         onCreate={handleCreateSession}
         availableAgents={availableAgents}
+        worktreeOptions={worktreeOptions}
+        repoOptions={repoOptions}
       />
       <SessionDrawer
         session={selectedSession}
@@ -122,6 +150,18 @@ export const App: React.FC<AppProps> = ({
         onBoardChange={setCurrentBoardId}
         sessions={sessions}
         onSessionClick={setSelectedSessionId}
+      />
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        boards={boards}
+        repos={repos}
+        onCreateBoard={onCreateBoard}
+        onUpdateBoard={onUpdateBoard}
+        onDeleteBoard={onDeleteBoard}
+        onDeleteRepo={onDeleteRepo}
+        onDeleteWorktree={onDeleteWorktree}
+        onCreateWorktree={onCreateWorktree}
       />
     </Layout>
   );

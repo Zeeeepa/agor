@@ -131,10 +131,20 @@ app.use('/repos/clone', {
 });
 
 app.use('/repos/:id/worktrees', {
-  async create(data: { branch: string; name: string }, params: RouteParams) {
+  async create(data: { name: string; ref: string; createBranch?: boolean }, params: RouteParams) {
     const id = params.route?.id;
     if (!id) throw new Error('Repo ID required');
     return reposService.createWorktree(id, data, params);
+  },
+});
+
+app.use('/repos/:id/worktrees/:name', {
+  async remove(_id: unknown, params: RouteParams & { route?: { name?: string } }) {
+    const id = params.route?.id;
+    const name = params.route?.name;
+    if (!id) throw new Error('Repo ID required');
+    if (!name) throw new Error('Worktree name required');
+    return reposService.removeWorktree(id, name, params);
   },
 });
 

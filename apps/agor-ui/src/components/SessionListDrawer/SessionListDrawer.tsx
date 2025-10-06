@@ -29,16 +29,16 @@ export const SessionListDrawer: React.FC<SessionListDrawerProps> = ({
   const { token } = useToken();
   const [searchQuery, setSearchQuery] = useState('');
 
-  const currentBoard = boards.find((b) => b.board_id === currentBoardId);
+  const currentBoard = boards.find(b => b.board_id === currentBoardId);
 
   // Filter sessions by current board
-  const boardSessions = sessions.filter((session) =>
+  const boardSessions = sessions.filter(session =>
     currentBoard?.sessions.includes(session.session_id)
   );
 
   // Filter sessions by search query
   const filteredSessions = boardSessions.filter(
-    (session) =>
+    session =>
       session.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       session.agent.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -91,13 +91,8 @@ export const SessionListDrawer: React.FC<SessionListDrawerProps> = ({
           style={{ width: '100%' }}
           value={currentBoardId}
           onChange={onBoardChange}
-          options={boards.map((board) => ({
-            label: (
-              <Space>
-                <span>{board.icon}</span>
-                <span>{board.name}</span>
-              </Space>
-            ),
+          options={boards.map(board => ({
+            label: `${board.icon || '📋'} ${board.name}`,
             value: board.board_id,
           }))}
         />
@@ -114,7 +109,7 @@ export const SessionListDrawer: React.FC<SessionListDrawerProps> = ({
           placeholder="Search sessions..."
           prefix={<SearchOutlined />}
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={e => setSearchQuery(e.target.value)}
           allowClear
         />
       </div>
@@ -124,7 +119,7 @@ export const SessionListDrawer: React.FC<SessionListDrawerProps> = ({
         <List
           dataSource={filteredSessions}
           locale={{ emptyText: 'No sessions in this board' }}
-          renderItem={(session) => (
+          renderItem={session => (
             <List.Item
               style={{
                 cursor: 'pointer',

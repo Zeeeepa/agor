@@ -1,6 +1,7 @@
+import { getRepoReferenceOptions } from '@agor/core/config';
 import { Alert, ConfigProvider, message, Spin, theme } from 'antd';
 import { App as AgorApp } from './components/App';
-import { useAgorClient, useAgorData, useSessionActions } from './hooks';
+import { useAgorClient, useAgorData, useBoardActions, useSessionActions } from './hooks';
 import { mockAgents } from './mocks';
 import './App.css';
 
@@ -9,11 +10,14 @@ function App() {
   const { client, connected, connecting, error: connectionError } = useAgorClient();
 
   // Fetch data
-  const { sessions, tasks, boards, loading, error: dataError } = useAgorData(client);
+  const { sessions, tasks, boards, repos, loading, error: dataError } = useAgorData(client);
 
   // Session actions
   const { createSession, forkSession, spawnSession, updateSession, deleteSession } =
     useSessionActions(client);
+
+  // Board actions
+  const { createBoard, updateBoard, deleteBoard } = useBoardActions(client);
 
   // Show connection error
   if (connectionError) {
@@ -144,6 +148,81 @@ function App() {
     }
   };
 
+  // Handle board CRUD
+  const handleCreateBoard = async (board: Partial<import('@agor/core/types').Board>) => {
+    const created = await createBoard(board);
+    if (created) {
+      message.success('Board created successfully!');
+    }
+  };
+
+  const handleUpdateBoard = async (
+    boardId: string,
+    updates: Partial<import('@agor/core/types').Board>
+  ) => {
+    const updated = await updateBoard(boardId as import('@agor/core/types').UUID, updates);
+    if (updated) {
+      message.success('Board updated successfully!');
+    }
+  };
+
+  const handleDeleteBoard = async (boardId: string) => {
+    const success = await deleteBoard(boardId as import('@agor/core/types').UUID);
+    if (success) {
+      message.success('Board deleted successfully!');
+    }
+  };
+
+  // Handle repo/worktree deletion
+  const handleDeleteRepo = async (repoId: string) => {
+    if (!client) return;
+    try {
+      await client.service('repos').remove(repoId);
+      message.success('Repository deleted successfully!');
+    } catch (error) {
+      message.error(
+        `Failed to delete repository: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  };
+
+  const handleDeleteWorktree = async (repoId: string, worktreeName: string) => {
+    if (!client) return;
+    try {
+      // Use custom route: DELETE /repos/:id/worktrees/:name
+      await client.service(`repos/${repoId}/worktrees`).remove(worktreeName);
+      message.success('Worktree deleted successfully!');
+    } catch (error) {
+      message.error(
+        `Failed to delete worktree: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  };
+
+  const handleCreateWorktree = async (
+    repoId: string,
+    data: { name: string; ref: string; createBranch: boolean }
+  ) => {
+    if (!client) return;
+    try {
+      await client.service(`repos/${repoId}/worktrees`).create({
+        name: data.name,
+        ref: data.ref,
+        createBranch: data.createBranch,
+      });
+      message.success('Worktree created successfully!');
+    } catch (error) {
+      message.error(
+        `Failed to create worktree: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  };
+
+  // Generate repo reference options for dropdowns
+  const allOptions = getRepoReferenceOptions(repos);
+  const worktreeOptions = allOptions.filter(opt => opt.type === 'managed-worktree');
+  const repoOptions = allOptions.filter(opt => opt.type === 'managed');
+
   // Render main app
   return (
     <ConfigProvider theme={{ algorithm: theme.darkAlgorithm }}>
@@ -152,13 +231,21 @@ function App() {
         tasks={tasks}
         availableAgents={mockAgents}
         boards={boards}
+        repos={repos}
+        worktreeOptions={worktreeOptions}
+        repoOptions={repoOptions}
         onCreateSession={handleCreateSession}
         onForkSession={handleForkSession}
         onSpawnSession={handleSpawnSession}
         onSendPrompt={handleSendPrompt}
         onUpdateSession={handleUpdateSession}
         onDeleteSession={handleDeleteSession}
-        onSettingsClick={() => console.log('Settings clicked')}
+        onCreateBoard={handleCreateBoard}
+        onUpdateBoard={handleUpdateBoard}
+        onDeleteBoard={handleDeleteBoard}
+        onDeleteRepo={handleDeleteRepo}
+        onDeleteWorktree={handleDeleteWorktree}
+        onCreateWorktree={handleCreateWorktree}
       />
     </ConfigProvider>
   );
