@@ -4,6 +4,8 @@ import { Button, Layout, Space, Typography } from 'antd';
 const { Header } = Layout;
 const { Title, Text } = Typography;
 
+// GitHub icon added to navbar
+
 export interface AppHeaderProps {
   onMenuClick?: () => void;
   onSettingsClick?: () => void;
@@ -71,7 +73,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         <Button
           type="text"
           icon={<GithubOutlined />}
-          href="https://github.com/maxtheman/agor"
+          href="https://github.com/mistercrunch/agor"
           target="_blank"
           rel="noopener noreferrer"
           style={{ color: '#fff' }}
