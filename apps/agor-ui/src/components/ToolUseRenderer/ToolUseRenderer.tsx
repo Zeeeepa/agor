@@ -154,62 +154,51 @@ export const ToolUseRenderer: React.FC<ToolUseRendererProps> = ({ toolUse, toolR
         <CheckCircleOutlined style={{ color: token.colorSuccess }} />
       )
     ) : undefined,
-    content: (
+    content: toolResult ? (
       <div>
-        {/* Tool input parameters (collapsible) */}
-        <details style={{ marginBottom: toolResult ? token.sizeUnit : 0 }}>
-          <summary style={{ cursor: 'pointer', fontSize: 12, color: token.colorTextSecondary }}>
-            Input parameters
+        {/* Tool result */}
+        <div
+          style={{
+            padding: token.sizeUnit,
+            borderRadius: token.borderRadius,
+            background: isError ? 'rgba(255, 77, 79, 0.05)' : 'rgba(82, 196, 26, 0.05)',
+            border: `1px solid ${isError ? token.colorErrorBorder : token.colorSuccessBorder}`,
+          }}
+        >
+          <Paragraph
+            ellipsis={{ rows: 10, expandable: true, symbol: 'show more' }}
+            style={{
+              fontFamily: 'monospace',
+              fontSize: 11,
+              whiteSpace: 'pre-wrap',
+              margin: 0,
+            }}
+          >
+            {resultText}
+          </Paragraph>
+        </div>
+
+        {/* Tool input parameters (collapsible below result) */}
+        <details style={{ marginTop: token.sizeUnit }}>
+          <summary style={{ cursor: 'pointer', fontSize: 11, color: token.colorTextSecondary }}>
+            Show input parameters
           </summary>
           <pre
             style={{
-              marginTop: token.sizeUnit,
+              marginTop: token.sizeUnit / 2,
               background: token.colorBgLayout,
               padding: token.sizeUnit,
               borderRadius: token.borderRadius,
               fontFamily: 'Monaco, Menlo, Ubuntu Mono, Consolas, source-code-pro, monospace',
-              fontSize: 11,
+              fontSize: 10,
               overflowX: 'auto',
             }}
           >
             {JSON.stringify(input, null, 2)}
           </pre>
         </details>
-
-        {/* Tool result */}
-        {toolResult && (
-          <div
-            style={{
-              padding: token.sizeUnit,
-              borderRadius: token.borderRadius,
-              background: isError ? 'rgba(255, 77, 79, 0.05)' : 'rgba(82, 196, 26, 0.05)',
-              border: `1px solid ${isError ? token.colorErrorBorder : token.colorSuccessBorder}`,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                color: token.colorTextSecondary,
-                marginBottom: token.sizeUnit / 2,
-              }}
-            >
-              Output:
-            </div>
-            <Paragraph
-              ellipsis={{ rows: 10, expandable: true, symbol: 'show more' }}
-              style={{
-                fontFamily: 'monospace',
-                fontSize: 11,
-                whiteSpace: 'pre-wrap',
-                margin: 0,
-              }}
-            >
-              {resultText}
-            </Paragraph>
-          </div>
-        )}
       </div>
-    ),
+    ) : undefined,
   };
 
   return (
