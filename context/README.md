@@ -14,9 +14,12 @@ This directory contains modular knowledge files that document Agor's concepts, a
 - **[core.md](concepts/core.md)** - The 5 primitives, core insights, and vision
 - **[models.md](concepts/models.md)** - Information architecture, data models, and relationships
 - **[id-management.md](concepts/id-management.md)** - UUIDv7 strategy, short IDs, collision resolution
-- **[architecture.md](concepts/architecture.md)** - System design, storage structure, data flow (WIP)
+- **[architecture.md](concepts/architecture.md)** - System design, storage structure, data flow
 - **[design.md](concepts/design.md)** - UI/UX principles and component patterns
 - **[frontend-guidelines.md](concepts/frontend-guidelines.md)** - React/Ant Design patterns, token-based styling, WebSocket integration, component structure
+- **[conversation-ui.md](concepts/conversation-ui.md)** - Task-centric conversation UI, universal message schema, component patterns
+- **[websockets.md](concepts/websockets.md)** - Real-time communication with FeathersJS/Socket.io, progressive streaming, future scalability
+- **[agent-integration.md](concepts/agent-integration.md)** - Claude Agent SDK integration, session continuity, live execution
 
 ### Explorations (Work in Progress)
 
@@ -31,17 +34,13 @@ Experimental ideas and designs not yet crystallized into concepts. These represe
 **CLI & User Experience:**
 
 - **[cli.md](explorations/cli.md)** - CLI design patterns (oclif framework, entity commands, stateful context management)
-- **[conversation-design.md](explorations/conversation-design.md)** - Conversational interface patterns for agent interactions
+- **[conversation-design-future.md](explorations/conversation-design-future.md)** - Advanced conversation UI features (tool blocks, LLM enrichment, pattern detection)
 - **[native-cli-feature-gaps.md](explorations/native-cli-feature-gaps.md)** - Feature comparison between native agent CLIs and SDK capabilities
 
 **Orchestration & Coordination:**
 
 - **[subtask-orchestration.md](explorations/subtask-orchestration.md)** - Multi-agent task coordination and getting agents to spawn Agor-tracked subtasks
 - **[async-jobs.md](explorations/async-jobs.md)** - Background job processing, queuing strategies, and long-running task management
-
-**Real-time Communication:**
-
-- **[websockets.md](explorations/websockets.md)** - WebSocket architecture with Socket.io, current broadcast-all design, future board-based channels, and multiplayer features (cursor tracking, presence, collaborative editing)
 
 **Lifecycle:** `explorations/` → `concepts/` when design is validated and ready to be official
 

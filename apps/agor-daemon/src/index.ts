@@ -79,20 +79,22 @@ async function main() {
   console.log(`📦 Connecting to database: ${DB_PATH}`);
   const db = createDatabase({ url: DB_PATH });
 
-  // Initialize repositories for ClaudeTool
-  const messagesRepo = new MessagesRepository(db);
-  const sessionsRepo = new SessionRepository(db);
-
-  // Initialize ClaudeTool with repositories and API key
-  const claudeTool = new ClaudeTool(messagesRepo, sessionsRepo, apiKey);
-
-  // Register services
+  // Register services first (needed by ClaudeTool)
   app.use('/sessions', createSessionsService(db));
   app.use('/tasks', createTasksService(db));
   const messagesService = createMessagesService(db);
   app.use('/messages', messagesService);
   app.use('/boards', createBoardsService(db));
   app.use('/repos', createReposService(db));
+
+  // Initialize repositories for ClaudeTool
+  const messagesRepo = new MessagesRepository(db);
+  const sessionsRepo = new SessionRepository(db);
+
+  // Initialize ClaudeTool with repositories, API key, AND app-level messagesService
+  // CRITICAL: Must use app.service('messages') to ensure WebSocket events are emitted
+  // Using the raw service instance bypasses Feathers event publishing
+  const claudeTool = new ClaudeTool(messagesRepo, sessionsRepo, apiKey, app.service('messages'));
 
   // Configure custom route for bulk message creation
   app.use('/messages/bulk', {
@@ -141,39 +143,85 @@ async function main() {
       // Get session to find current message count
       const session = await sessionsService.get(id, params);
       const messageStartIndex = session.message_count;
+      const startTimestamp = new Date().toISOString();
 
-      // Execute prompt via ClaudeTool (creates user + assistant messages)
-      const result = await claudeTool.executePrompt(id as SessionID, data.prompt);
-
-      // Create task for this prompt
+      // PHASE 1: Create task immediately with 'running' status (UI shows task instantly)
       const task = await tasksService.create({
         session_id: id,
-        status: 'completed',
+        status: 'running', // Start as running, will be updated to completed
         description: data.prompt.substring(0, 120),
         full_prompt: data.prompt,
         message_range: {
           start_index: messageStartIndex,
-          end_index: messageStartIndex + 1, // user message + assistant message
-          start_timestamp: new Date().toISOString(),
-          end_timestamp: new Date().toISOString(),
+          end_index: messageStartIndex + 1, // Will be updated after messages created
+          start_timestamp: startTimestamp,
+          end_timestamp: startTimestamp, // Will be updated when complete
         },
-        tool_use_count: 0, // TODO: extract from assistant message
+        tool_use_count: 0, // Will be updated after assistant message
         git_state: {
           sha_at_start: session.git_state?.current_sha || 'unknown',
         },
       });
 
-      // Update session with new task
+      // Update session with new task immediately
       await sessionsService.patch(id, {
         tasks: [...session.tasks, task.task_id],
-        message_count: session.message_count + 2,
       });
 
+      // PHASE 2: Execute prompt in background (COMPLETELY DETACHED from HTTP request context)
+      // Use setImmediate to break out of FeathersJS request scope
+      // This ensures WebSocket events flush immediately, not batched with request
+      setImmediate(() => {
+        claudeTool
+          .executePrompt(id as SessionID, data.prompt, task.task_id)
+          .then(async result => {
+            try {
+              // PHASE 3: Mark task as completed and update message count
+              // (Messages already created with task_id, no need to patch)
+              const endTimestamp = new Date().toISOString();
+              const totalMessages = 1 + result.assistantMessageIds.length; // user + assistants
+
+              await tasksService.patch(task.task_id, {
+                status: 'completed',
+                message_range: {
+                  start_index: messageStartIndex,
+                  end_index: messageStartIndex + totalMessages - 1,
+                  start_timestamp: startTimestamp,
+                  end_timestamp: endTimestamp,
+                },
+                tool_use_count: result.assistantMessageIds.reduce((count, _id, index) => {
+                  // First assistant message likely has tools
+                  return count; // TODO: Count actual tools from messages
+                }, 0),
+              });
+
+              await sessionsService.patch(id, {
+                message_count: session.message_count + totalMessages,
+              });
+
+              console.log(`✅ Task ${task.task_id} completed successfully`);
+            } catch (error) {
+              console.error(`❌ Error completing task ${task.task_id}:`, error);
+              // Mark task as failed
+              await tasksService.patch(task.task_id, {
+                status: 'failed',
+              });
+            }
+          })
+          .catch(async error => {
+            console.error(`❌ Error executing prompt for task ${task.task_id}:`, error);
+            // Mark task as failed
+            await tasksService.patch(task.task_id, {
+              status: 'failed',
+            });
+          });
+      });
+
+      // Return immediately with task ID - don't wait for Claude to finish!
       return {
         success: true,
         taskId: task.task_id,
-        userMessageId: result.userMessageId,
-        assistantMessageId: result.assistantMessageId,
+        status: 'running',
       };
     },
   });

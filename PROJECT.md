@@ -44,7 +44,18 @@
 - `agor repo add/list/rm` - Repository management
 - `agor repo worktree add/list` - Worktree operations
 - `agor session list` - Table view with filters
-- `agor session load-claude <id>` - Import Claude Code sessions
+- `agor session load-claude <id>` - Import Claude Code sessions from transcript files
+- `agor board list/add-session` - Board organization
+
+**Live Agent Execution** (`packages/core/tools/claude/`)
+
+- Claude Agent SDK integration (`@anthropic-ai/claude-agent-sdk`)
+- `ClaudePromptService` - Execute prompts with CLAUDE.md auto-loading
+- `ClaudeTool` - Create user/assistant messages, emit WebSocket events
+- Preset system prompts matching CLI behavior
+- **Session continuity** - Agent SDK `resume` parameter for conversation history
+- Progressive message streaming with real-time WebSocket updates
+- Optional tool execution framework (Read, Write, Bash - disabled for now)
 
 **Data Architecture**
 
@@ -52,6 +63,7 @@
 - Tasks = mutable state containers (extracted from user messages)
 - Bulk insert endpoints (`/messages/bulk`, `/tasks/bulk`)
 - Message → Task extraction pipeline (batched at 100 items)
+- Real-time 4-phase prompt execution: Create task → Call Claude → Link messages → Mark complete
 
 **See:** [CLAUDE.md](CLAUDE.md) for complete implementation details.
 
@@ -59,40 +71,49 @@
 
 ## What's Next
 
-### 🚧 Phase 3: Session Lifecycle & Agent Integration
+### ✅ Phase 3: Live Claude Agent Integration (COMPLETE)
+
+**What Works Now:**
+
+- ✅ Claude Agent SDK integration with CLAUDE.md auto-loading
+- ✅ Progressive WebSocket message streaming (real-time UI updates)
+- ✅ Agent SDK session continuity (`resume` parameter for conversation history)
+- ✅ Task-centric conversation view with running/completed states
+
+**Next Steps**
+
+- [ ] Add token usage tracking from Agent SDK metadata
+- [ ] Enable optional tools (`allowedTools: ['Read', 'Grep']`) with UX design
+- [ ] Session fork/spawn with genealogy tracking
 
 **Session Management**
 
-- [ ] `agor session show <id>` - Detailed view with genealogy tree visualization
-- [ ] `agor session create` - Interactive session creation with agent selection
-- [ ] Fork/spawn operations with genealogy tracking
+- [ ] `agor session show <id>` - Detailed view with genealogy tree
+- [ ] `agor session create` - Interactive session wizard
 - [ ] Session state transitions (idle → running → completed)
-- [ ] `agor session clear` - Delete all sessions/tasks/messages (with confirmation)
-
-**Agent Integration**
-
-- [ ] Agent adapter framework (abstract interface for Claude Code, Cursor, Codex, Gemini)
-- [ ] Claude Code native integration (launch agent with Agor context)
-- [ ] Session → Agent context passing (concepts, parent tasks, git state)
-- [ ] Real-time task state updates (running → completed/failed)
-- [ ] Bidirectional sync (agent events → Agor database)
+- [ ] Fork at decision points, spawn for subtasks
 
 **Advanced Features**
 
-- [ ] Concept management (attach/detach knowledge nuggets to sessions)
-- [ ] Report generation (auto-generate structured learnings from tasks)
-- [ ] Daemon auto-start (spawn daemon if not running)
-- [ ] Process management (PID file, graceful shutdown)
+- [ ] Concept management (modular context composition)
+- [ ] Report generation from completed tasks
+- [ ] Multi-agent abstraction (when adding agent #2)
+- [ ] Daemon auto-start and process management
 
 ### 🚧 Phase 4: UI Integration & Desktop App
 
 **Connect UI to Backend**
 
 - [x] Messages API integration with real-time WebSocket
-- [x] ConversationView component with Ant Design X Bubble
+- [x] ConversationView component with task-centric organization
 - [x] SessionDrawer with live message loading
-- [ ] Replace remaining mock data with daemon API calls
+- [x] Progressive message rendering with streaming WebSocket updates
+- [x] Task status updates (running → completed) with UI feedback
+- [x] ToolUseRenderer for displaying tool calls inline
+- [x] MarkdownRenderer with proper Ant Design Typography styling
+- [ ] Replace remaining mock data with daemon API calls (sessions, boards)
 - [ ] Session creation flow integrated with daemon
+- [ ] Prompt input component with submit to daemon
 - [ ] Task timeline visualization from messages table
 - [ ] Genealogy tree rendering from database
 

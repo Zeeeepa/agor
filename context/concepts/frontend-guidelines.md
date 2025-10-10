@@ -154,6 +154,24 @@ const MyComponent = () => {
 - UI hooks subscribe to service events and update state automatically
 - Cross-entity cleanup handled via service event hooks (e.g., removing session from boards on deletion)
 
+**Critical: Use app.service() for Event Emission**
+
+When calling service methods from backend code, **always use `app.service('name')`** instead of direct service instances:
+
+```typescript
+// ❌ WRONG - No events emitted
+const messagesService = createMessagesService(db);
+app.use('/messages', messagesService);
+await messagesService.create(message); // Events NOT published!
+
+// ✅ CORRECT - Events emitted
+const messagesService = createMessagesService(db);
+app.use('/messages', messagesService);
+await app.service('messages').create(message); // Events published to WebSocket clients!
+```
+
+**Why:** FeathersJS only emits WebSocket events when methods are called through the app-level service proxy (`app.service('name')`), not when called directly on the service instance. Direct calls bypass the event publishing layer.
+
 ### Common Pitfall: Props Not Updating Derived State
 
 **Problem:** Component receives updated props via WebSocket, but UI doesn't reflect changes.

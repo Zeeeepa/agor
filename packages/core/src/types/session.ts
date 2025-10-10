@@ -12,6 +12,8 @@ export interface Session {
 
   agent: 'claude-code' | 'cursor' | 'codex' | 'gemini';
   agent_version?: string;
+  /** Agent SDK session ID for maintaining conversation history (Claude Agent SDK only) */
+  agent_session_id?: string;
   status: SessionStatus;
   created_at: string;
   last_updated: string;

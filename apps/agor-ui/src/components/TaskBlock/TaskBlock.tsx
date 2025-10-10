@@ -17,22 +17,23 @@ import {
   DownOutlined,
   FileTextOutlined,
   GithubOutlined,
+  LoadingOutlined,
   MessageOutlined,
   RightOutlined,
   ToolOutlined,
 } from '@ant-design/icons';
-import { Collapse, Space, Tag, Typography, theme } from 'antd';
+import { Collapse, Space, Spin, Tag, Typography, theme } from 'antd';
 import type React from 'react';
 import { useMemo } from 'react';
+import { AgentChain } from '../AgentChain';
 import { MessageBlock } from '../MessageBlock';
-import { ToolBlock } from '../ToolBlock';
 
 const { Text, Paragraph } = Typography;
 
 /**
  * Block types for rendering
  */
-type Block = { type: 'message'; message: Message } | { type: 'tool-block'; messages: Message[] };
+type Block = { type: 'message'; message: Message } | { type: 'agent-chain'; messages: Message[] };
 
 interface TaskBlockProps {
   task: Task;
@@ -41,17 +42,38 @@ interface TaskBlockProps {
 }
 
 /**
- * Check if message is tool-only (no text content, only tool uses)
+ * Check if assistant message contains ONLY tools/thinking (no user-facing text)
+ * Returns true if message should be in AgentChain, false if it should be a regular message bubble
  */
-function isToolOnlyMessage(message: Message): boolean {
+function isAgentChainMessage(message: Message): boolean {
+  // Only assistant messages
+  if (message.role !== 'assistant') return false;
+
+  // String content - this is user-facing response, NOT agent chain
   if (typeof message.content === 'string') {
-    return message.content.trim().length === 0 && message.tool_uses && message.tool_uses.length > 0;
+    return !message.content.trim(); // Empty = not a response
   }
 
+  // Empty content
+  if (!message.content) return false;
+
+  // Array content - check what types of blocks we have
   if (Array.isArray(message.content)) {
-    const hasText = message.content.some(block => block.type === 'text');
     const hasTools = message.content.some(block => block.type === 'tool_use');
-    return !hasText && hasTools;
+    const hasThinking = message.content.some(block => block.type === 'thinking');
+    const hasText = message.content.some(block => block.type === 'text');
+
+    // If it has tools BUT ALSO has text, treat as mixed message
+    // We'll split it: tools go to AgentChain, text goes to MessageBlock
+    if (hasTools && hasText) {
+      return false; // Let MessageBlock handle the splitting
+    }
+
+    // Only tools/thinking, no text = pure agent chain
+    if (hasTools || hasThinking) return true;
+
+    // Only text blocks = user-facing response
+    return false;
   }
 
   return false;
@@ -59,38 +81,32 @@ function isToolOnlyMessage(message: Message): boolean {
 
 /**
  * Group messages into blocks:
- * - When 3+ consecutive tool-only messages appear → group into ToolBlock
- * - Otherwise → render as individual MessageBlock
+ * - Consecutive assistant messages with thoughts/tools → AgentChain
+ * - User messages and assistant text responses → individual MessageBlocks
  */
 function groupMessagesIntoBlocks(messages: Message[]): Block[] {
   const blocks: Block[] = [];
-  let toolBuffer: Message[] = [];
+  let agentBuffer: Message[] = [];
 
   for (const msg of messages) {
-    if (isToolOnlyMessage(msg)) {
-      // Accumulate tool-only messages
-      toolBuffer.push(msg);
+    if (isAgentChainMessage(msg)) {
+      // Accumulate agent chain messages
+      agentBuffer.push(msg);
     } else {
-      // Flush tool buffer if we have 3+ tools
-      if (toolBuffer.length >= 3) {
-        blocks.push({ type: 'tool-block', messages: toolBuffer });
-        toolBuffer = [];
-      } else if (toolBuffer.length > 0) {
-        // Too few to group - render individually
-        blocks.push(...toolBuffer.map(m => ({ type: 'message' as const, message: m })));
-        toolBuffer = [];
+      // Flush agent buffer if we have any
+      if (agentBuffer.length > 0) {
+        blocks.push({ type: 'agent-chain', messages: agentBuffer });
+        agentBuffer = [];
       }
 
-      // Add the current message
+      // Add the current message as individual block
       blocks.push({ type: 'message', message: msg });
     }
   }
 
   // Flush remaining buffer
-  if (toolBuffer.length >= 3) {
-    blocks.push({ type: 'tool-block', messages: toolBuffer });
-  } else if (toolBuffer.length > 0) {
-    blocks.push(...toolBuffer.map(m => ({ type: 'message' as const, message: m })));
+  if (agentBuffer.length > 0) {
+    blocks.push({ type: 'agent-chain', messages: agentBuffer });
   }
 
   return blocks;
@@ -111,7 +127,9 @@ export const TaskBlock: React.FC<TaskBlockProps> = ({
       case 'completed':
         return <CheckCircleOutlined style={{ color: '#52c41a' }} />;
       case 'running':
-        return <ClockCircleOutlined style={{ color: '#1890ff' }} />;
+        return (
+          <Spin indicator={<LoadingOutlined spin style={{ fontSize: 16, color: '#1890ff' }} />} />
+        );
       case 'failed':
         return <CloseCircleOutlined style={{ color: '#ff4d4f' }} />;
       default:
@@ -179,103 +197,93 @@ export const TaskBlock: React.FC<TaskBlockProps> = ({
   );
 
   return (
-    <div
-      style={{
-        margin: `${token.sizeUnit}px 0`,
-        borderLeft: `3px solid ${token.colorBorder}`,
-        paddingLeft: token.sizeUnit,
-      }}
-    >
-      <Collapse
-        defaultActiveKey={defaultExpanded ? ['task-content'] : []}
-        expandIcon={({ isActive }) => (isActive ? <DownOutlined /> : <RightOutlined />)}
-        style={{ background: 'transparent', border: 'none' }}
-        items={[
-          {
-            key: 'task-content',
-            label: taskHeader,
-            style: { border: 'none' },
-            styles: {
-              header: {
-                padding: `${token.sizeUnit}px ${token.sizeUnit * 1.5}px`,
-                background: token.colorBgContainer,
-                border: `1px solid ${token.colorBorder}`,
-                borderRadius: token.borderRadius * 1.5,
-                alignItems: 'flex-start',
-              },
-              body: {
-                border: 'none',
-                background: 'transparent',
-                padding: `${token.sizeUnit}px ${token.sizeUnit * 1.5}px`,
-              },
+    <Collapse
+      defaultActiveKey={defaultExpanded ? ['task-content'] : []}
+      expandIcon={({ isActive }) => (isActive ? <DownOutlined /> : <RightOutlined />)}
+      style={{ background: 'transparent', border: 'none', margin: `${token.sizeUnit}px 0` }}
+      items={[
+        {
+          key: 'task-content',
+          label: taskHeader,
+          style: { border: 'none' },
+          styles: {
+            header: {
+              padding: `${token.sizeUnit}px ${token.sizeUnit * 1.5}px`,
+              background: token.colorBgContainer,
+              border: `1px solid ${token.colorBorder}`,
+              borderRadius: token.borderRadius * 1.5,
+              alignItems: 'flex-start',
             },
-            children: (
-              <div style={{ paddingTop: token.sizeUnit }}>
-                {blocks.length === 0 ? (
-                  <Text type="secondary" style={{ fontStyle: 'italic' }}>
-                    No messages in this task
-                  </Text>
-                ) : (
-                  blocks.map(block => {
-                    if (block.type === 'message') {
-                      return (
-                        <MessageBlock key={block.message.message_id} message={block.message} />
-                      );
-                    }
-                    if (block.type === 'tool-block') {
-                      // Use first message ID as key for tool block
-                      const blockKey = `tool-block-${block.messages[0]?.message_id || 'unknown'}`;
-                      return <ToolBlock key={blockKey} messages={block.messages} />;
-                    }
-                    return null;
-                  })
-                )}
+            body: {
+              border: 'none',
+              background: 'transparent',
+              padding: `${token.sizeUnit}px ${token.sizeUnit * 1.5}px`,
+            },
+          },
+          children: (
+            <div style={{ paddingTop: token.sizeUnit }}>
+              {blocks.length === 0 ? (
+                <Text type="secondary" style={{ fontStyle: 'italic' }}>
+                  No messages in this task
+                </Text>
+              ) : (
+                blocks.map(block => {
+                  if (block.type === 'message') {
+                    return <MessageBlock key={block.message.message_id} message={block.message} />;
+                  }
+                  if (block.type === 'agent-chain') {
+                    // Use first message ID as key for agent chain
+                    const blockKey = `agent-chain-${block.messages[0]?.message_id || 'unknown'}`;
+                    return <AgentChain key={blockKey} messages={block.messages} />;
+                  }
+                  return null;
+                })
+              )}
 
-                {/* Show commit message if available */}
-                {task.git_state.commit_message && (
-                  <div
+              {/* Show commit message if available */}
+              {task.git_state.commit_message && (
+                <div
+                  style={{
+                    marginTop: token.sizeUnit * 1.5,
+                    padding: `${token.sizeUnit * 0.75}px ${token.sizeUnit * 1.25}px`,
+                    background: 'rgba(0, 0, 0, 0.02)',
+                    borderRadius: token.borderRadius,
+                  }}
+                >
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    <GithubOutlined /> Commit:{' '}
+                  </Text>
+                  <Text code style={{ fontSize: 11 }}>
+                    {task.git_state.commit_message}
+                  </Text>
+                </div>
+              )}
+
+              {/* Show report if available */}
+              {task.report && (
+                <div style={{ marginTop: token.sizeUnit * 1.5 }}>
+                  <Tag icon={<FileTextOutlined />} color="green">
+                    Task Report
+                  </Tag>
+                  <Paragraph
                     style={{
-                      marginTop: token.sizeUnit * 1.5,
-                      padding: `${token.sizeUnit * 0.75}px ${token.sizeUnit * 1.25}px`,
-                      background: 'rgba(0, 0, 0, 0.02)',
+                      marginTop: token.sizeUnit,
+                      padding: token.sizeUnit * 1.5,
+                      background: 'rgba(82, 196, 26, 0.05)',
+                      border: `1px solid ${token.colorSuccessBorder}`,
                       borderRadius: token.borderRadius,
+                      fontSize: 13,
+                      whiteSpace: 'pre-wrap',
                     }}
                   >
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      <GithubOutlined /> Commit:{' '}
-                    </Text>
-                    <Text code style={{ fontSize: 11 }}>
-                      {task.git_state.commit_message}
-                    </Text>
-                  </div>
-                )}
-
-                {/* Show report if available */}
-                {task.report && (
-                  <div style={{ marginTop: token.sizeUnit * 1.5 }}>
-                    <Tag icon={<FileTextOutlined />} color="green">
-                      Task Report
-                    </Tag>
-                    <Paragraph
-                      style={{
-                        marginTop: token.sizeUnit,
-                        padding: token.sizeUnit * 1.5,
-                        background: 'rgba(82, 196, 26, 0.05)',
-                        border: `1px solid ${token.colorSuccessBorder}`,
-                        borderRadius: token.borderRadius,
-                        fontSize: 13,
-                        whiteSpace: 'pre-wrap',
-                      }}
-                    >
-                      {task.report}
-                    </Paragraph>
-                  </div>
-                )}
-              </div>
-            ),
-          },
-        ]}
-      />
-    </div>
+                    {task.report}
+                  </Paragraph>
+                </div>
+              )}
+            </div>
+          ),
+        },
+      ]}
+    />
   );
 };

@@ -9,14 +9,12 @@
  */
 
 import type { Message } from '@agor/core/types';
-import { CodeOutlined, RobotOutlined, UserOutlined } from '@ant-design/icons';
+import { RobotOutlined, UserOutlined } from '@ant-design/icons';
 import { Bubble } from '@ant-design/x';
-import { Avatar, Button, Typography, theme } from 'antd';
-import React from 'react';
+import { Avatar, theme } from 'antd';
+import type React from 'react';
 import { MarkdownRenderer } from '../MarkdownRenderer';
 import { ToolUseRenderer } from '../ToolUseRenderer';
-
-const { Paragraph } = Typography;
 
 interface ToolUseBlock {
   type: 'tool_use';
@@ -46,26 +44,28 @@ interface MessageBlockProps {
 export const MessageBlock: React.FC<MessageBlockProps> = ({ message }) => {
   const { token } = theme.useToken();
   const isUser = message.role === 'user';
-  const [showRaw, setShowRaw] = React.useState(false);
 
   // Skip rendering if message has no content
   if (!message.content || (typeof message.content === 'string' && message.content.trim() === '')) {
     return null;
   }
 
-  // Parse content blocks from message
+  // Parse content blocks from message, preserving order
   const getContentBlocks = (): {
-    textBlocks: string[];
+    textBeforeTools: string[];
     toolBlocks: { toolUse: ToolUseBlock; toolResult?: ToolResultBlock }[];
+    textAfterTools: string[];
   } => {
-    const textBlocks: string[] = [];
+    const textBeforeTools: string[] = [];
+    const textAfterTools: string[] = [];
     const toolBlocks: { toolUse: ToolUseBlock; toolResult?: ToolResultBlock }[] = [];
 
     // Handle string content
     if (typeof message.content === 'string') {
       return {
-        textBlocks: [message.content],
+        textBeforeTools: [message.content],
         toolBlocks: [],
+        textAfterTools: [],
       };
     }
 
@@ -73,14 +73,21 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({ message }) => {
     if (Array.isArray(message.content)) {
       const toolUseMap = new Map<string, ToolUseBlock>();
       const toolResultMap = new Map<string, ToolResultBlock>();
+      let hasSeenTool = false;
 
-      // First pass: collect tool_use and tool_result blocks
+      // First pass: collect blocks and track order
       for (const block of message.content) {
         if (block.type === 'text') {
-          textBlocks.push((block as TextBlock).text);
+          const text = (block as TextBlock).text;
+          if (hasSeenTool) {
+            textAfterTools.push(text);
+          } else {
+            textBeforeTools.push(text);
+          }
         } else if (block.type === 'tool_use') {
           const toolUse = block as ToolUseBlock;
           toolUseMap.set(toolUse.id, toolUse);
+          hasSeenTool = true;
         } else if (block.type === 'tool_result') {
           const toolResult = block as ToolResultBlock;
           toolResultMap.set(toolResult.tool_use_id, toolResult);
@@ -96,124 +103,85 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({ message }) => {
       }
     }
 
-    return { textBlocks, toolBlocks };
+    return { textBeforeTools, toolBlocks, textAfterTools };
   };
 
-  const { textBlocks, toolBlocks } = getContentBlocks();
+  const { textBeforeTools, toolBlocks, textAfterTools } = getContentBlocks();
 
   // Skip rendering if message has no meaningful content
-  const hasText = textBlocks.some(text => text.trim().length > 0);
+  const hasTextBefore = textBeforeTools.some(text => text.trim().length > 0);
+  const hasTextAfter = textAfterTools.some(text => text.trim().length > 0);
   const hasTools = toolBlocks.length > 0;
 
-  if (!hasText && !hasTools) {
+  if (!hasTextBefore && !hasTextAfter && !hasTools) {
     return null;
   }
 
-  // If this message is only tool invocations (no text), render compact
-  if (!hasText && hasTools) {
-    return (
-      <div style={{ margin: `${token.sizeUnit * 1.5}px 0` }}>
-        {toolBlocks.map(({ toolUse, toolResult }) => (
-          <ToolUseRenderer key={toolUse.id} toolUse={toolUse} toolResult={toolResult} />
-        ))}
-      </div>
-    );
-  }
+  // IMPORTANT: For messages with tools AND text:
+  // 1. Show tools first (compact, no bubble)
+  // 2. Show text after as a response bubble
+  // This matches the expected UX: "Here's what I did" (tools) then "Here's the result" (response)
 
-  // Get raw content for debugging
-  const getRawContent = (): string => {
-    if (typeof message.content === 'string') {
-      return message.content;
-    }
-    if (Array.isArray(message.content)) {
-      return JSON.stringify(message.content, null, 2);
-    }
-    return '';
-  };
-
-  // Render standard message with Bubble
   return (
-    <div style={{ margin: `${token.sizeUnit}px 0` }}>
-      <Bubble
-        placement={isUser ? 'end' : 'start'}
-        avatar={
-          isUser ? (
-            <Avatar icon={<UserOutlined />} style={{ backgroundColor: token.colorPrimary }} />
-          ) : (
-            <Avatar icon={<RobotOutlined />} style={{ backgroundColor: token.colorSuccess }} />
-          )
-        }
-        content={
-          <>
-            {hasText && (
+    <>
+      {/* Thinking/text before tools (if any) - rare but possible */}
+      {hasTextBefore && (
+        <div style={{ margin: `${token.sizeUnit}px 0` }}>
+          <Bubble
+            placement={isUser ? 'end' : 'start'}
+            avatar={
+              isUser ? (
+                <Avatar icon={<UserOutlined />} style={{ backgroundColor: token.colorPrimary }} />
+              ) : (
+                <Avatar icon={<RobotOutlined />} style={{ backgroundColor: token.colorSuccess }} />
+              )
+            }
+            content={
               <div style={{ wordWrap: 'break-word' }}>
                 {isUser ? (
-                  // User messages: plain text (preserve newlines)
-                  textBlocks.filter(t => t.trim()).join('\n\n')
+                  textBeforeTools.filter(t => t.trim()).join('\n\n')
                 ) : (
-                  // Assistant messages: render as markdown with GFM support
-                  <MarkdownRenderer content={textBlocks.filter(t => t.trim()).join('\n\n')} />
+                  <MarkdownRenderer content={textBeforeTools.filter(t => t.trim()).join('\n\n')} />
                 )}
               </div>
-            )}
-            {toolBlocks.length > 0 && (
-              <div style={{ marginTop: token.sizeUnit * 1.5 }}>
-                {toolBlocks.map(({ toolUse, toolResult }, index) => (
-                  <div
-                    key={toolUse.id}
-                    style={{ marginBottom: index < toolBlocks.length - 1 ? token.sizeUnit : 0 }}
-                  >
-                    <ToolUseRenderer toolUse={toolUse} toolResult={toolResult} />
-                  </div>
-                ))}
-              </div>
-            )}
+            }
+            variant={isUser ? 'filled' : 'outlined'}
+            styles={{
+              content: {
+                backgroundColor: isUser ? token.colorPrimary : undefined,
+                color: isUser ? '#fff' : undefined,
+              },
+            }}
+          />
+        </div>
+      )}
 
-            {/* Debug toggle for raw content */}
-            <div
-              style={{
-                marginTop: token.sizeUnit,
-                paddingTop: token.sizeUnit,
-                borderTop: `1px dashed ${token.colorBorderSecondary}`,
-              }}
-            >
-              <Button
-                size="small"
-                type="text"
-                icon={<CodeOutlined />}
-                onClick={() => setShowRaw(!showRaw)}
-                style={{ fontSize: 11 }}
-              >
-                {showRaw ? 'Hide' : 'Show'} raw
-              </Button>
-              {showRaw && (
-                <Paragraph
-                  copyable
-                  style={{
-                    marginTop: token.sizeUnit,
-                    fontSize: 11,
-                    fontFamily: 'monospace',
-                    background: token.colorBgLayout,
-                    padding: token.sizeUnit,
-                    borderRadius: token.borderRadius,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-all',
-                  }}
-                >
-                  {getRawContent()}
-                </Paragraph>
-              )}
-            </div>
-          </>
-        }
-        variant={isUser ? 'filled' : 'outlined'}
-        styles={{
-          content: {
-            backgroundColor: isUser ? token.colorPrimary : undefined,
-            color: isUser ? '#fff' : undefined,
-          },
-        }}
-      />
-    </div>
+      {/* Tools (compact, no bubble) */}
+      {hasTools && (
+        <div style={{ margin: `${token.sizeUnit * 1.5}px 0` }}>
+          {toolBlocks.map(({ toolUse, toolResult }) => (
+            <ToolUseRenderer key={toolUse.id} toolUse={toolUse} toolResult={toolResult} />
+          ))}
+        </div>
+      )}
+
+      {/* Response text after tools */}
+      {hasTextAfter && (
+        <div style={{ margin: `${token.sizeUnit}px 0` }}>
+          <Bubble
+            placement="start"
+            avatar={
+              <Avatar icon={<RobotOutlined />} style={{ backgroundColor: token.colorSuccess }} />
+            }
+            content={
+              <div style={{ wordWrap: 'break-word' }}>
+                <MarkdownRenderer content={textAfterTools.filter(t => t.trim()).join('\n\n')} />
+              </div>
+            }
+            variant="outlined"
+          />
+        </div>
+      )}
+    </>
   );
 };

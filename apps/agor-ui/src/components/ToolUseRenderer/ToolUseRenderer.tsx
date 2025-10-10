@@ -7,7 +7,7 @@
  * - Collapsible input parameters
  *
  * Note: This component does NOT use ThoughtChain - parent components
- * (like ToolBlock) are responsible for wrapping this in ThoughtChain items.
+ * (like AgentChain) are responsible for wrapping this in ThoughtChain items.
  */
 
 import type { Message } from '@agor/core/types';

@@ -39,21 +39,37 @@ export function useSessionActions(client: AgorClient | null): UseSessionActionsR
       setCreating(true);
       setError(null);
 
-      // Create session with minimal required data
-      // The backend will generate IDs and defaults
+      // Parse worktree reference if using existing worktree
+      let repoSlug: string | undefined;
+      let worktreeName: string | undefined;
+
+      if (config.repoSetupMode === 'existing-worktree' && config.worktreeRef) {
+        // Format: "repo-slug:worktree-name" e.g., "agor:test-yo"
+        const parts = config.worktreeRef.split(':');
+        repoSlug = parts[0];
+        worktreeName = parts[1];
+      } else if (config.repoSetupMode === 'new-worktree') {
+        repoSlug = config.existingRepoSlug;
+        worktreeName = config.newWorktreeName;
+        // TODO: Create the worktree via daemon before creating session
+      } else if (config.repoSetupMode === 'new-repo') {
+        repoSlug = config.repoSlug;
+        worktreeName = config.initialWorktreeName;
+        // TODO: Clone repo and create worktree via daemon before creating session
+      }
+
+      // Create session with repo/worktree data
       const newSession = await client.service('sessions').create({
         agent: config.agent as 'claude-code' | 'cursor' | 'codex' | 'gemini',
         status: 'idle' as const,
-        description: config.initialPrompt || undefined,
-        // Note: Backend needs to handle repo/git_state defaults
-        // This is a placeholder until we add repo selection to the modal
+        description: config.initialPrompt || config.title || undefined,
         repo: {
-          repo_id: 'default' as import('@agor/core/types').RepoID, // TODO: Get from repo selection
-          slug: 'default',
-          worktree_id: undefined,
+          repo_slug: repoSlug,
+          worktree_name: worktreeName,
+          managed_worktree: !!worktreeName, // If we have a worktree name, it's managed
         },
         git_state: {
-          ref: config.gitBranch || 'main',
+          ref: config.newWorktreeBranch || config.initialWorktreeBranch || 'main',
           base_sha: 'HEAD',
           current_sha: 'HEAD',
         },

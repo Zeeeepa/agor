@@ -76,16 +76,17 @@ Agor is a **multi-client agent orchestration platform** with a clean separation 
 
 ### Technology Stack
 
-| Layer | Technology | Why |
-|-------|-----------|-----|
-| **API Framework** | FeathersJS | REST + WebSocket unified, service-based architecture |
-| **ORM** | Drizzle | Lightweight, type-safe, SQL-first, LibSQL support |
-| **Local DB** | LibSQL/SQLite | File-based, offline-first, embedded replicas |
-| **Cloud DB** | PostgreSQL (Turso/Supabase) | Scalable, LibSQL compatible via Turso |
-| **UI Framework** | React + Vite | Fast dev, HMR, component-based |
-| **CLI Framework** | oclif | TypeScript, plugin system, enterprise-grade |
-| **Desktop** | Electron or Tauri | Native app, bundles daemon + UI |
-| **Monorepo** | Turborepo + pnpm | Fast builds, shared packages |
+| Layer               | Technology                  | Why                                                         |
+| ------------------- | --------------------------- | ----------------------------------------------------------- |
+| **API Framework**   | FeathersJS                  | REST + WebSocket unified, service-based architecture        |
+| **Agent Execution** | Claude Agent SDK            | Claude Code capabilities, CLAUDE.md loading, built-in tools |
+| **ORM**             | Drizzle                     | Lightweight, type-safe, SQL-first, LibSQL support           |
+| **Local DB**        | LibSQL/SQLite               | File-based, offline-first, embedded replicas                |
+| **Cloud DB**        | PostgreSQL (Turso/Supabase) | Scalable, LibSQL compatible via Turso                       |
+| **UI Framework**    | React + Vite                | Fast dev, HMR, component-based                              |
+| **CLI Framework**   | oclif                       | TypeScript, plugin system, enterprise-grade                 |
+| **Desktop**         | Electron or Tauri           | Native app, bundles daemon + UI                             |
+| **Monorepo**        | Turborepo + pnpm            | Fast builds, shared packages                                |
 
 ---
 
@@ -96,6 +97,7 @@ Agor is a **multi-client agent orchestration platform** with a clean separation 
 **Strategy:** Materialize what we query by, JSON-ify what we don't.
 
 This approach enables:
+
 - **Migration-free schema evolution** - Most changes are TypeScript-only
 - **Cross-database compatibility** - Same code works in LibSQL and PostgreSQL
 - **Query performance** - Materialized columns get indexes
@@ -104,6 +106,7 @@ This approach enables:
 ### Materialized Columns (Indexed)
 
 Create columns for:
+
 - **Identity:** Primary keys, foreign keys
 - **Filters:** status, agent, board_id
 - **Joins:** Genealogy (parent_session_id, forked_from_session_id)
@@ -115,6 +118,7 @@ All materialized columns get B-tree indexes.
 ### JSON Blobs (Flexible Schema)
 
 Store in `data` column:
+
 - **Nested objects:** git_state, repo config, message_range
 - **Arrays:** concepts[], tasks[], children[], worktrees[]
 - **Rarely queried:** description, agent_version, color, icon
@@ -123,6 +127,7 @@ Store in `data` column:
 ### Example Schema (Sessions Table)
 
 **Materialized columns:**
+
 ```typescript
 {
   session_id: text('session_id').primaryKey(),
@@ -137,6 +142,7 @@ Store in `data` column:
 ```
 
 **JSON blob:**
+
 ```typescript
 data: json('data').$type<{
   agent_version?: string;
@@ -154,6 +160,7 @@ data: json('data').$type<{
 ### Query Patterns
 
 **✅ Fast (uses materialized columns):**
+
 ```typescript
 // Filter by status (indexed)
 .where(eq(sessions.status, 'running'))
@@ -170,6 +177,7 @@ data: json('data').$type<{
 ```
 
 **✅ Still works (JSON access):**
+
 ```typescript
 // Access nested JSON (Drizzle handles cross-DB)
 .select({
@@ -179,6 +187,7 @@ data: json('data').$type<{
 ```
 
 **❌ Avoid (requires JSON filtering):**
+
 ```typescript
 // Can't efficiently filter by JSON nested fields
 .where(eq(sessions.data.git_state.ref, 'main')) // NO INDEX!
@@ -191,6 +200,7 @@ data: json('data').$type<{
 **No schema changes needed!** 🎉
 
 1. **Change driver:**
+
    ```typescript
    // V1
    import { drizzle } from 'drizzle-orm/libsql';
@@ -260,6 +270,7 @@ export class SessionService implements ServiceMethods<Session> {
 ```
 
 **Automatically get REST endpoints:**
+
 ```
 GET    /sessions
 GET    /sessions/:id
@@ -271,9 +282,10 @@ POST   /sessions/:id/spawn   # Custom method
 ```
 
 **Real-time events:**
+
 ```typescript
 // Client automatically receives WebSocket events
-client.service('sessions').on('created', (session) => {
+client.service('sessions').on('created', session => {
   console.log('New session:', session);
 });
 ```
@@ -291,13 +303,13 @@ export default class SessionList extends Command {
     const daemonUrl = process.env.AGOR_DAEMON_URL || 'http://localhost:3030';
 
     // Check if daemon is running
-    if (!await isDaemonRunning(daemonUrl)) {
+    if (!(await isDaemonRunning(daemonUrl))) {
       this.error('Daemon not running. Start it with: cd apps/agor-daemon && pnpm dev');
     }
 
     const client = createClient(daemonUrl);
     const sessions = await client.service('sessions').find({
-      query: { $limit: 50, $sort: { created_at: -1 } }
+      query: { $limit: 50, $sort: { created_at: -1 } },
     });
 
     // Display in table...
@@ -322,18 +334,15 @@ export function useSessions(boardId?: string) {
     const sessionsService = client.service('sessions');
 
     // Initial fetch
-    sessionsService.find({ query: { board_id: boardId } })
-      .then((result) => setSessions(result.data));
+    sessionsService.find({ query: { board_id: boardId } }).then(result => setSessions(result.data));
 
     // Real-time listeners
-    sessionsService.on('created', (session) => {
-      setSessions((prev) => [...prev, session]);
+    sessionsService.on('created', session => {
+      setSessions(prev => [...prev, session]);
     });
 
-    sessionsService.on('patched', (session) => {
-      setSessions((prev) =>
-        prev.map((s) => (s.session_id === session.session_id ? session : s))
-      );
+    sessionsService.on('patched', session => {
+      setSessions(prev => prev.map(s => (s.session_id === session.session_id ? session : s)));
     });
 
     return () => {
@@ -348,11 +357,203 @@ export function useSessions(boardId?: string) {
 
 ---
 
+## Agent Execution Layer
+
+### Overview
+
+Agor executes prompts against AI agents (Claude Code, Cursor, etc.) through a unified execution layer. For Claude, we use the **Claude Agent SDK** which provides Claude Code's full capabilities including automatic CLAUDE.md loading, built-in tools, and proper system prompts.
+
+### Architecture: ClaudePromptService
+
+**Location:** `packages/core/src/tools/claude/prompt-service.ts`
+
+The `ClaudePromptService` handles:
+
+1. Loading conversation history from database
+2. Building system prompts with session context
+3. Executing prompts via Claude Agent SDK
+4. Creating user + assistant messages in database
+5. Emitting WebSocket events for real-time UI updates
+
+### SDK Evolution
+
+**V1 (Basic SDK)** → `@anthropic-ai/sdk`
+
+- ❌ No CLAUDE.md support
+- ❌ No built-in tools
+- ❌ Manual system prompt construction
+- ✅ Lightweight (~20kb)
+
+**V2 (Agent SDK)** → `@anthropic-ai/claude-agent-sdk`
+
+- ✅ Automatic CLAUDE.md loading via `settingSources: ['project']`
+- ✅ Preset system prompts via `preset: 'claude_code'`
+- ✅ Built-in tools (Read, Write, Bash, etc.) - optional
+- ✅ CWD management
+- ✅ Streaming via async generators
+- ✅ Same behavior as Claude Code CLI
+
+### Prompt Execution Flow
+
+```
+User sends prompt → Daemon
+          ↓
+  [PHASE 1: Create Task]
+  - Create task with status='running'
+  - Update session.tasks[] immediately
+  - UI shows task with spinner
+          ↓
+  [PHASE 2: Execute via Agent SDK]
+  - Load conversation history (last 10 messages)
+  - Build system prompt with cwd, repo, git state
+  - Load CLAUDE.md from working directory
+  - Call Claude API with Agent SDK query()
+  - Stream response tokens (future: SSE to UI)
+          ↓
+  [PHASE 3: Store Messages]
+  - Create user message in database
+  - Create assistant message in database
+  - Link messages to task via task_id
+  - WebSocket events emitted automatically
+          ↓
+  [PHASE 4: Complete Task]
+  - Update task status to 'completed'
+  - Update message_range with end timestamp
+  - UI removes spinner, shows completion
+```
+
+### Agent SDK Configuration
+
+```typescript
+import { query } from '@anthropic-ai/claude-agent-sdk';
+
+const result = query({
+  prompt: userPrompt,
+  options: {
+    cwd: session.repo.cwd, // Working directory for file access
+    systemPrompt: {
+      type: 'preset',
+      preset: 'claude_code', // Loads Claude Code system prompt
+    },
+    settingSources: ['project'], // Auto-loads CLAUDE.md!
+    model: 'claude-sonnet-4-5-20250929',
+    allowedTools: [], // Disable tools for now (messages-only mode)
+  },
+});
+
+// Stream responses (async generator)
+for await (const chunk of result) {
+  if (chunk.type === 'text') {
+    // Handle text chunk
+  }
+}
+```
+
+### CLAUDE.md Loading
+
+The Agent SDK automatically loads `CLAUDE.md` from the session's working directory when:
+
+- `settingSources: ['project']` is set
+- `systemPrompt.preset: 'claude_code'` is used
+
+This matches the Claude Code CLI behavior exactly. No manual file reading needed!
+
+### WebSocket Event Flow
+
+**Critical:** Must use `app.service('messages')` instead of raw service instance to emit events.
+
+```typescript
+// ❌ WRONG - No WebSocket events emitted
+const messagesService = createMessagesService(db);
+await messagesService.create(message);
+
+// ✅ CORRECT - Events emitted to all clients
+const messagesService = app.service('messages');
+await messagesService.create(message);
+```
+
+**Event types:**
+
+- `created` - New message/task/session created
+- `patched` - Message/task/session updated
+- `removed` - Message/task/session deleted
+
+**UI receives events via hooks:**
+
+```typescript
+// agor-ui/src/hooks/useMessages.ts
+client.service('messages').on('created', message => {
+  setMessages(prev => [...prev, message]);
+});
+```
+
+### Message-Task Linking
+
+Messages are created first, then linked to tasks:
+
+```typescript
+// 1. Create messages via ClaudePromptService
+const { userMessageId, assistantMessageId } = await claudeTool.executePrompt(sessionId, prompt);
+
+// 2. Link messages to task
+await messagesService.patch(userMessageId, { task_id: taskId });
+await messagesService.patch(assistantMessageId, { task_id: taskId });
+```
+
+This approach allows:
+
+- Immediate task creation (UI shows spinner)
+- Slow Claude API call (streaming response)
+- Retroactive linking once complete
+
+### Conversation History Management
+
+**Strategy:** Load last N messages (default: 10) for context
+
+```typescript
+async loadConversationHistory(sessionId: SessionID, limit: number = 10) {
+  const messages = await this.messagesRepo.findBySessionId(sessionId);
+  const recentMessages = messages.slice(-limit);
+
+  // Filter out tool-only messages (empty content)
+  return recentMessages.filter(m => m.content && m.content.length > 0);
+}
+```
+
+**Why 10 messages?**
+
+- Balances context vs token usage
+- Prevents context window overflow on long sessions
+- User can increase via config if needed
+
+### Future: Tool Support
+
+The Agent SDK supports tools (Read, Write, Bash, etc.). When enabled:
+
+```typescript
+options: {
+  allowedTools: ['Read', 'Write', 'Bash'],  // Enable specific tools
+  toolChoice: 'auto',  // Let Claude decide when to use tools
+}
+```
+
+This enables:
+
+- Claude can read files directly
+- Claude can edit files in worktree
+- Claude can run bash commands
+- Full Claude Code CLI parity
+
+**Implementation status:** Disabled for now (messages-only mode)
+
+---
+
 ## Git Worktree Integration
 
 ### Why Worktrees?
 
 Git worktrees are **critical for parallel AI-assisted development**:
+
 - No stashing/committing WIP to switch branches
 - Test experimental approaches in parallel
 - Run multiple agent sessions simultaneously
@@ -386,6 +587,7 @@ Git worktrees are **critical for parallel AI-assisted development**:
 ### Repository Management
 
 **Add repository:**
+
 ```bash
 $ agor repo add https://github.com/user/myapp.git
 
@@ -400,6 +602,7 @@ Repository added:
 ```
 
 **Create worktree:**
+
 ```bash
 $ agor repo worktree add myapp feat-auth
 
@@ -434,6 +637,7 @@ Session {
 ```
 
 **Benefits:**
+
 - Session isolation via separate working directories
 - Parallel development without context switching
 - Clean genealogy tracking (fork → new worktree)
@@ -542,6 +746,7 @@ agor/
 ### 1. Why Local Daemon Pattern?
 
 **Benefits:**
+
 - CLI/GUI don't need database drivers (lighter clients)
 - Consistent API interface (local = cloud)
 - Business logic in one place (daemon)
@@ -549,6 +754,7 @@ agor/
 - Auto-start daemon on first CLI command
 
 **Precedents:**
+
 - Docker Desktop (Docker daemon)
 - Git LFS (LFS server)
 - VSCode (extension host)
@@ -556,11 +762,13 @@ agor/
 ### 2. Why Feathers over NestJS?
 
 **Feathers:**
+
 - ✅ REST + WebSocket from one codebase
 - ✅ Service-based architecture (maps to Agor domains)
 - ✅ Lightweight (~20kb core)
 
 **NestJS:**
+
 - ⚠️ Enterprise-scale (overkill for local daemon)
 - ⚠️ No built-in WebSocket (need Socket.IO separately)
 - ✅ Better for large teams, microservices
@@ -568,6 +776,7 @@ agor/
 ### 3. Why Drizzle + Feathers?
 
 Feathers supports multiple ORMs. Drizzle gives:
+
 - ✅ Better TypeScript inference
 - ✅ LibSQL support (via Turso)
 - ✅ Lightweight (7kb vs 100kb+ for Sequelize)
@@ -576,10 +785,12 @@ Feathers supports multiple ORMs. Drizzle gives:
 ### 4. Why Hybrid Schema (Columns + JSON)?
 
 **Materialized columns:**
+
 - Fast queries with indexes
 - Type-safe filters and joins
 
 **JSON blobs:**
+
 - Migration-free schema evolution
 - Flexible nested structures
 - No ALTER TABLE for new fields
@@ -609,37 +820,48 @@ Feathers supports multiple ORMs. Drizzle gives:
 ## Implementation Status
 
 **✅ Completed:**
+
 - Monorepo structure (Turborepo + pnpm)
 - Drizzle schema with hybrid materialization
 - UUIDv7 ID generation + short ID resolution
-- FeathersJS daemon with services (sessions, repos, boards, tasks)
-- CLI commands (repo add/list/rm, session list, worktree management)
+- FeathersJS daemon with services (sessions, repos, boards, tasks, messages)
+- CLI commands (repo add/list/rm, session list/load-claude, worktree management)
 - Feathers client integration (@agor/core/api)
 - Repository + worktree management
 - Git operations via daemon
+- Real-time WebSocket events for GUI
+- React UI with session canvas, message display, task visualization
+- Claude Code session import from JSONL transcripts
+- Basic Claude API integration (messages-only mode)
 
 **🚧 In Progress:**
+
+- Claude Agent SDK migration (CLAUDE.md auto-loading, preset prompts)
 - Session fork/spawn operations
-- Real-time WebSocket for GUI
-- Task management commands
+- Task completion tracking and git state
 
 **📋 Planned:**
+
+- Claude Agent SDK tool support (Read, Write, Bash)
 - Desktop app (Electron/Tauri)
 - Cloud sync (V2)
 - Concept management
 - Report generation
+- Multi-agent support (Cursor, Codex, Gemini)
 
 ---
 
 ## References
 
 **Internal Docs:**
+
 - [[core]] - Vision and primitives
 - [[models]] - Data model definitions
 - [[design]] - UI/UX standards
 - [[id-management]] - UUIDv7 strategy
 
 **External Resources:**
+
 - FeathersJS: https://feathersjs.com/
 - Drizzle ORM: https://orm.drizzle.team/
 - LibSQL: https://github.com/tursodatabase/libsql

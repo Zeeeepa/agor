@@ -38,7 +38,7 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
         ? new Date(row.updated_at).toISOString()
         : new Date(row.created_at).toISOString(),
       ...row.data,
-      tasks: row.data.tasks.map((id) => id as UUID),
+      tasks: row.data.tasks.map(id => id as UUID),
       repo: repoData
         ? {
             ...repoData,
@@ -58,7 +58,7 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
         forked_from_session_id: row.forked_from_session_id as UUID | undefined,
         fork_point_task_id: genealogyData.fork_point_task_id as UUID | undefined,
         spawn_point_task_id: genealogyData.spawn_point_task_id as UUID | undefined,
-        children: genealogyData.children.map((id) => id as UUID),
+        children: genealogyData.children.map(id => id as UUID),
       },
     };
   }
@@ -69,6 +69,32 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
   private sessionToInsert(session: Partial<Session>): SessionInsert {
     const now = Date.now();
     const sessionId = session.session_id ?? generateId();
+
+    // Compute CWD based on worktree configuration
+    let cwd: string;
+
+    if (session.repo?.managed_worktree && session.repo.repo_slug && session.repo.worktree_name) {
+      // For managed worktrees, use ~/.agor/worktrees/{repo}/{worktree}
+      const homeDir = process.env.HOME || process.env.USERPROFILE || '~';
+      cwd = `${homeDir}/.agor/worktrees/${session.repo.repo_slug}/${session.repo.worktree_name}`;
+    } else if (session.repo?.cwd) {
+      // Use explicitly provided CWD
+      cwd = session.repo.cwd;
+    } else {
+      // Fall back to process.cwd()
+      cwd = process.cwd();
+    }
+
+    // Ensure repo has a CWD
+    const repo = session.repo
+      ? {
+          ...session.repo,
+          cwd,
+        }
+      : {
+          cwd,
+          managed_worktree: false,
+        };
 
     return {
       session_id: sessionId,
@@ -82,7 +108,7 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
       data: {
         agent_version: session.agent_version,
         description: session.description,
-        repo: session.repo,
+        repo,
         git_state: session.git_state ?? {
           ref: 'main',
           base_sha: '',
@@ -126,7 +152,7 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
       throw new AmbiguousIdError(
         'Session',
         id,
-        results.map((r) => formatShortId(r.session_id))
+        results.map(r => formatShortId(r.session_id))
       );
     }
 
@@ -190,7 +216,7 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
   async findAll(): Promise<Session[]> {
     try {
       const rows = await this.db.select().from(sessions).all();
-      return rows.map((row) => this.rowToSession(row));
+      return rows.map(row => this.rowToSession(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to find all sessions: ${error instanceof Error ? error.message : String(error)}`,
@@ -206,7 +232,7 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
     try {
       const rows = await this.db.select().from(sessions).where(eq(sessions.status, status)).all();
 
-      return rows.map((row) => this.rowToSession(row));
+      return rows.map(row => this.rowToSession(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to find sessions by status: ${error instanceof Error ? error.message : String(error)}`,
@@ -226,7 +252,7 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
 
       // For now, return all sessions (board filtering will be done at service layer)
       // TODO: Add board_id as materialized column if frequently filtered
-      return rows.map((row) => this.rowToSession(row));
+      return rows.map(row => this.rowToSession(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to find sessions by board: ${error instanceof Error ? error.message : String(error)}`,
@@ -254,7 +280,7 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
         )
         .all();
 
-      return rows.map((row) => this.rowToSession(row));
+      return rows.map(row => this.rowToSession(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to find child sessions: ${error instanceof Error ? error.message : String(error)}`,
@@ -370,7 +396,10 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
    */
   async count(): Promise<number> {
     try {
-      const result = await this.db.select({ count: sql<number>`count(*)` }).from(sessions).get();
+      const result = await this.db
+        .select({ count: sql<number>`count(*)` })
+        .from(sessions)
+        .get();
 
       return result?.count ?? 0;
     } catch (error) {

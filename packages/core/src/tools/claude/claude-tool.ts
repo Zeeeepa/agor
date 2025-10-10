@@ -13,11 +13,19 @@ import * as path from 'node:path';
 import { generateId } from '../../db/ids';
 import type { MessagesRepository } from '../../db/repositories/messages';
 import type { SessionRepository } from '../../db/repositories/sessions';
-import type { Message, MessageID, SessionID, ToolUse } from '../../types';
+import type { Message, MessageID, SessionID, TaskID, ToolUse } from '../../types';
 import type { ImportOptions, ITool, SessionData, ToolCapabilities } from '../base';
 import { loadClaudeSession } from './import/load-session';
 import { transcriptsToMessages } from './import/message-converter';
 import { ClaudePromptService } from './prompt-service';
+
+/**
+ * Service interface for creating messages via FeathersJS
+ * This ensures WebSocket events are emitted when messages are created
+ */
+export interface MessagesService {
+  create(data: Partial<Message>): Promise<Message>;
+}
 
 export class ClaudeTool implements ITool {
   readonly toolType = 'claude-code' as const;
@@ -28,7 +36,8 @@ export class ClaudeTool implements ITool {
   constructor(
     private messagesRepo?: MessagesRepository,
     private sessionsRepo?: SessionRepository,
-    private apiKey?: string
+    private apiKey?: string,
+    private messagesService?: MessagesService
   ) {
     if (messagesRepo && sessionsRepo) {
       this.promptService = new ClaudePromptService(messagesRepo, sessionsRepo, apiKey);
@@ -90,94 +99,97 @@ export class ClaudeTool implements ITool {
   /**
    * Execute a prompt against a session
    *
-   * Creates user message, streams response from Claude, creates assistant message.
-   * Returns both message IDs for tracking.
+   * Creates user message, streams response from Claude, creates assistant messages.
+   * Agent SDK may return multiple assistant messages (e.g., tool invocation, then response).
+   * Returns user message ID and array of assistant message IDs.
+   *
+   * Also captures and stores the Agent SDK session_id for conversation continuity.
    */
   async executePrompt(
     sessionId: SessionID,
-    prompt: string
-  ): Promise<{ userMessageId: MessageID; assistantMessageId: MessageID }> {
+    prompt: string,
+    taskId?: TaskID
+  ): Promise<{ userMessageId: MessageID; assistantMessageIds: MessageID[] }> {
     if (!this.promptService || !this.messagesRepo) {
       throw new Error('ClaudeTool not initialized with repositories for live execution');
     }
 
+    if (!this.messagesService) {
+      throw new Error('ClaudeTool not initialized with messagesService for live execution');
+    }
+
     // Get next message index
     const existingMessages = await this.messagesRepo.findBySessionId(sessionId);
-    const nextIndex = existingMessages.length;
+    let nextIndex = existingMessages.length;
 
-    // Create user message immediately
+    // Create user message immediately via FeathersJS service (emits WebSocket event)
     const userMessage: Message = {
       message_id: generateId() as MessageID,
       session_id: sessionId,
       type: 'user',
       role: 'user',
-      index: nextIndex,
+      index: nextIndex++,
       timestamp: new Date().toISOString(),
       content_preview: prompt.substring(0, 200),
       content: prompt,
+      task_id: taskId, // Link to task immediately
     };
 
-    await this.messagesRepo.create(userMessage);
-    console.log(`📝 Created user message: ${userMessage.message_id}`);
+    await this.messagesService.create(userMessage);
 
-    // Stream response from Claude
-    const result = await this.promptService.promptSession(sessionId, prompt);
+    // Execute prompt via Agent SDK with progressive message creation
+    // As each assistant message arrives, create it immediately (sends WebSocket event)
+    const assistantMessageIds: MessageID[] = [];
+    const inputTokens = 0;
+    const outputTokens = 0;
+    let capturedAgentSessionId: string | undefined;
 
-    // Extract tool uses from assistant message content
-    const toolUses: ToolUse[] = [];
-    if (Array.isArray(result.message.content)) {
-      for (const block of result.message.content) {
-        if (block.type === 'tool_use') {
-          toolUses.push({
-            id: block.id,
-            name: block.name,
-            input: block.input as Record<string, unknown>,
-          });
+    for await (const assistantMsg of this.promptService.promptSessionStreaming(sessionId, prompt)) {
+      // Capture Agent SDK session_id from first message
+      if (!capturedAgentSessionId && assistantMsg.agentSessionId) {
+        capturedAgentSessionId = assistantMsg.agentSessionId;
+        console.log(
+          `🔑 Captured Agent SDK session_id for Agor session ${sessionId}: ${capturedAgentSessionId}`
+        );
+
+        // Store it in the session for future prompts
+        if (this.sessionsRepo) {
+          await this.sessionsRepo.update(sessionId, { agent_session_id: capturedAgentSessionId });
+          console.log(`💾 Stored Agent SDK session_id in Agor session`);
         }
       }
-    }
 
-    // Create content preview
-    let contentPreview = '';
-    // biome-ignore lint/suspicious/noExplicitAny: Anthropic SDK message content type
-    const messageContent: string | any[] = result.message.content as any;
-    if (typeof messageContent === 'string') {
-      contentPreview = messageContent.substring(0, 200);
-    } else if (Array.isArray(messageContent)) {
-      const textBlock = messageContent.find((b: { type: string }) => b.type === 'text');
-      if (textBlock && 'text' in textBlock) {
-        contentPreview = String(textBlock.text).substring(0, 200);
-      }
-    }
+      // Generate content preview from text blocks
+      const textBlocks = assistantMsg.content.filter(b => b.type === 'text').map(b => b.text);
+      const contentPreview = textBlocks.join('').substring(0, 200);
 
-    // Create assistant message
-    const assistantMessage: Message = {
-      message_id: generateId() as MessageID,
-      session_id: sessionId,
-      type: 'assistant',
-      role: 'assistant',
-      index: nextIndex + 1,
-      timestamp: new Date().toISOString(),
-      content_preview: contentPreview,
-      // biome-ignore lint/suspicious/noExplicitAny: Anthropic SDK ContentBlock is compatible but has different type signature
-      content: result.message.content as any,
-      tool_uses: toolUses.length > 0 ? toolUses : undefined,
-      metadata: {
-        model: result.message.model,
-        tokens: {
-          input: result.inputTokens,
-          output: result.outputTokens,
+      const message: Message = {
+        message_id: generateId() as MessageID,
+        session_id: sessionId,
+        type: 'assistant',
+        role: 'assistant',
+        index: nextIndex++,
+        timestamp: new Date().toISOString(),
+        content_preview: contentPreview,
+        content: assistantMsg.content as Message['content'], // ContentBlock[] array
+        tool_uses: assistantMsg.toolUses,
+        task_id: taskId, // Link to task immediately so UI can display progressively
+        metadata: {
+          model: 'claude-sonnet-4-5-20250929',
+          tokens: {
+            input: inputTokens,
+            output: outputTokens,
+          },
         },
-        original_id: result.message.id,
-      },
-    };
+      };
 
-    await this.messagesRepo.create(assistantMessage);
-    console.log(`🤖 Created assistant message: ${assistantMessage.message_id}`);
+      await this.messagesService.create(message);
+      assistantMessageIds.push(message.message_id);
+    }
 
     return {
       userMessageId: userMessage.message_id,
-      assistantMessageId: assistantMessage.message_id,
+      assistantMessageIds,
     };
   }
 }

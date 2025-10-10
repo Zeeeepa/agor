@@ -3,10 +3,8 @@ import {
   BranchesOutlined,
   CodeOutlined,
   DownOutlined,
-  EditOutlined,
   ForkOutlined,
   GithubOutlined,
-  PlusSquareOutlined,
   SendOutlined,
 } from '@ant-design/icons';
 import {
@@ -15,15 +13,30 @@ import {
   Divider,
   Drawer,
   Dropdown,
+  Flex,
   Input,
   Space,
   Tag,
+  Tooltip,
   Typography,
   theme,
 } from 'antd';
 import React from 'react';
 import type { Session } from '../../types';
 import { ConversationView } from '../ConversationView';
+import {
+  BranchPill,
+  ConceptPill,
+  DirtyStatePill,
+  ForkPill,
+  GitShaPill,
+  MessageCountPill,
+  RepoPill,
+  SessionIdPill,
+  SpawnPill,
+  ToolCountPill,
+  WorktreePill,
+} from '../Pill';
 import { ToolIcon } from '../ToolIcon';
 
 const { Title, Text } = Typography;
@@ -134,84 +147,45 @@ const SessionDrawer = ({
       width={720}
       open={open}
       onClose={onClose}
+      styles={{
+        body: {
+          paddingBottom: 0,
+        },
+      }}
     >
       {/* Genealogy Tags */}
       {(isForked || isSpawned) && (
         <div style={{ marginBottom: token.sizeUnit * 6 }}>
           <Space size={8}>
-            {isForked && (
-              <Tag icon={<ForkOutlined />} color="cyan">
-                FORKED from {session.genealogy.forked_from_session_id?.substring(0, 7)}
-                {session.genealogy.fork_point_task_id &&
-                  ` at task ${session.genealogy.fork_point_task_id.substring(0, 7)}`}
-              </Tag>
+            {isForked && session.genealogy.forked_from_session_id && (
+              <ForkPill
+                fromSessionId={session.genealogy.forked_from_session_id}
+                taskId={session.genealogy.fork_point_task_id}
+              />
             )}
-            {isSpawned && (
-              <Tag icon={<BranchesOutlined />} color="purple">
-                SPAWNED from {session.genealogy.parent_session_id?.substring(0, 7)}
-                {session.genealogy.spawn_point_task_id &&
-                  ` at task ${session.genealogy.spawn_point_task_id.substring(0, 7)}`}
-              </Tag>
+            {isSpawned && session.genealogy.parent_session_id && (
+              <SpawnPill
+                fromSessionId={session.genealogy.parent_session_id}
+                taskId={session.genealogy.spawn_point_task_id}
+              />
             )}
           </Space>
         </div>
       )}
 
-      {/* Git State */}
+      {/* Git & Repo Info */}
       <div style={{ marginBottom: token.sizeUnit * 6 }}>
-        <Title level={5}>Git State</Title>
-        <Space direction="vertical" size={4}>
-          <Text>
-            <CodeOutlined /> Branch: <Text code>{session.git_state.ref}</Text>
-          </Text>
-          <Text>
-            Base SHA: <Text code>{session.git_state.base_sha}</Text>
-          </Text>
-          <Text>
-            Current SHA: <Text code>{cleanSha}</Text>
-            {isDirty && (
-              <Tag icon={<EditOutlined />} color="orange" style={{ marginLeft: 8 }}>
-                uncommitted changes
-              </Tag>
-            )}
-          </Text>
+        <Space size={8} wrap>
+          {session.repo?.repo_slug ? (
+            <RepoPill repoName={session.repo.repo_slug} worktreeName={session.repo.worktree_name} />
+          ) : session.repo?.cwd ? (
+            <RepoPill repoName={session.repo.cwd.split('/').pop() || session.repo.cwd} />
+          ) : null}
+          {session.repo?.managed_worktree && <WorktreePill managed={true} />}
+          <BranchPill branch={session.git_state.ref} />
+          <GitShaPill sha={session.git_state.current_sha} isDirty={isDirty} />
         </Space>
       </div>
-
-      {/* Repository/Worktree Info */}
-      {session.repo && (
-        <div style={{ marginBottom: token.sizeUnit * 6 }}>
-          <Title level={5}>Repository</Title>
-          <Space direction="vertical" size={4}>
-            <Text>
-              <GithubOutlined />{' '}
-              {session.repo.repo_slug && session.repo.worktree_name ? (
-                <>
-                  <Text code>
-                    {session.repo.repo_slug}:{session.repo.worktree_name}
-                  </Text>
-                  {session.repo.managed_worktree && (
-                    <Tag color="blue" style={{ marginLeft: 8 }}>
-                      Managed
-                    </Tag>
-                  )}
-                </>
-              ) : session.repo.repo_slug ? (
-                <Text code>{session.repo.repo_slug}</Text>
-              ) : session.repo.cwd ? (
-                <Text code>{session.repo.cwd.split('/').pop() || session.repo.cwd}</Text>
-              ) : (
-                <Text type="secondary">No repository</Text>
-              )}
-            </Text>
-            {session.repo.cwd && (
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                <CodeOutlined /> {session.repo.cwd}
-              </Text>
-            )}
-          </Space>
-        </div>
-      )}
 
       {/* Concepts */}
       {session.concepts.length > 0 && (
@@ -219,9 +193,7 @@ const SessionDrawer = ({
           <Title level={5}>Loaded Concepts</Title>
           <Space size={8} wrap>
             {session.concepts.map(concept => (
-              <Tag key={concept} color="geekblue">
-                📦 {concept}
-              </Tag>
+              <ConceptPill key={concept} name={concept} />
             ))}
           </Space>
         </div>
@@ -233,61 +205,15 @@ const SessionDrawer = ({
       <div
         style={{
           flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
           minHeight: 0,
           marginBottom: token.sizeUnit * 6,
         }}
       >
-        <Title level={5}>Conversation</Title>
-        <div
-          style={{
-            flex: 1,
-            border: `1px solid ${token.colorBorder}`,
-            borderRadius: token.borderRadius,
-            minHeight: 0,
-          }}
-        >
-          <ConversationView
-            client={client}
-            sessionId={session.session_id}
-            onScrollRef={setScrollToBottom}
-          />
-        </div>
-      </div>
-
-      {/* Session Metadata */}
-      <Divider />
-      <div style={{ marginBottom: token.sizeUnit * 6 }}>
-        <Title level={5}>Session Metadata</Title>
-        <Space direction="vertical" size={4} style={{ width: '100%' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Text type="secondary">Session ID:</Text>
-            <Text code>{session.session_id}</Text>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Text type="secondary">Total Messages:</Text>
-            <Text>{session.message_count}</Text>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Text type="secondary">Tool Uses:</Text>
-            <Text>{session.tool_use_count}</Text>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Text type="secondary">Created:</Text>
-            <Text>{new Date(session.created_at).toLocaleString()}</Text>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Text type="secondary">Last Updated:</Text>
-            <Text>{new Date(session.last_updated).toLocaleString()}</Text>
-          </div>
-          {session.agent_version && (
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Text type="secondary">Agent Version:</Text>
-              <Text code>{session.agent_version}</Text>
-            </div>
-          )}
-        </Space>
+        <ConversationView
+          client={client}
+          sessionId={session.session_id}
+          onScrollRef={setScrollToBottom}
+        />
       </div>
 
       {/* Input Box Footer */}
@@ -295,66 +221,58 @@ const SessionDrawer = ({
         style={{
           position: 'sticky',
           bottom: 0,
-          left: 0,
-          right: 0,
-          padding: `${token.sizeUnit * 4}px ${token.sizeUnit * 6}px`,
           background: token.colorBgContainer,
           borderTop: `1px solid ${token.colorBorder}`,
-          marginTop: token.sizeUnit * 6,
+          padding: `${token.sizeUnit * 2}px ${token.sizeUnit * 6}px`,
           marginLeft: -token.sizeUnit * 6,
           marginRight: -token.sizeUnit * 6,
           marginBottom: -token.sizeUnit * 6,
         }}
       >
-        <Space.Compact style={{ width: '100%' }} direction="vertical" size={8}>
+        <Space direction="vertical" style={{ width: '100%' }} size={8}>
           <TextArea
             value={inputValue}
             onChange={e => setInputValue(e.target.value)}
             placeholder="Send a prompt, fork, or create a subtask..."
-            autoSize={{ minRows: 2, maxRows: 6 }}
+            autoSize={{ minRows: 1, maxRows: 10 }}
             onPressEnter={e => {
               if (e.shiftKey) {
-                // Allow Shift+Enter for new line
                 return;
               }
               e.preventDefault();
               handleSendPrompt();
             }}
           />
-          <Space size={8} style={{ width: '100%', justifyContent: 'space-between' }}>
+          <Space style={{ width: '100%', justifyContent: 'space-between' }}>
             <Space size={8}>
-              <Dropdown
-                menu={{
-                  items: [
-                    {
-                      key: 'fork',
-                      label: 'Fork Session',
-                      icon: <BranchesOutlined />,
-                      onClick: handleFork,
-                    },
-                    {
-                      key: 'subtask',
-                      label: 'Create Subtask',
-                      icon: <PlusSquareOutlined />,
-                      onClick: handleSubtask,
-                    },
-                  ],
-                }}
-                disabled={!inputValue.trim()}
-              >
-                <Button icon={<DownOutlined />}>More Actions</Button>
-              </Dropdown>
+              <SessionIdPill sessionId={session.session_id} showCopy={true} />
+              <MessageCountPill count={session.message_count} />
+              <ToolCountPill count={session.tool_use_count} />
             </Space>
-            <Button
-              type="primary"
-              icon={<SendOutlined />}
-              onClick={handleSendPrompt}
-              disabled={!inputValue.trim()}
-            >
-              Send Prompt
-            </Button>
+            <Button.Group>
+              <Tooltip title="Fork Session">
+                <Button
+                  icon={<ForkOutlined />}
+                  onClick={handleFork}
+                  disabled={!inputValue.trim()}
+                />
+              </Tooltip>
+              <Tooltip title="Spawn Subtask">
+                <Button
+                  icon={<BranchesOutlined />}
+                  onClick={handleSubtask}
+                  disabled={!inputValue.trim()}
+                />
+              </Tooltip>
+              <Button
+                type="primary"
+                icon={<SendOutlined />}
+                onClick={handleSendPrompt}
+                disabled={!inputValue.trim()}
+              />
+            </Button.Group>
           </Space>
-        </Space.Compact>
+        </Space>
       </div>
     </Drawer>
   );

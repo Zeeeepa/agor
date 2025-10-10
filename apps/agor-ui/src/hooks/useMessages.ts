@@ -5,6 +5,7 @@
 import type { AgorClient } from '@agor/core/api';
 import type { Message, SessionID } from '@agor/core/types';
 import { useCallback, useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 
 interface UseMessagesResult {
   messages: Message[];
@@ -71,14 +72,19 @@ export function useMessages(
     const handleMessageCreated = (message: Message) => {
       // Only add if it belongs to this session
       if (message.session_id === sessionId) {
-        setMessages(prev => {
-          // Check if message already exists (avoid duplicates)
-          if (prev.some(m => m.message_id === message.message_id)) {
-            return prev;
-          }
-          // Insert in correct position based on index
-          const newMessages = [...prev, message];
-          return newMessages.sort((a, b) => a.index - b.index);
+        // Use flushSync to force immediate render (bypass React 18 automatic batching)
+        flushSync(() => {
+          setMessages(prev => {
+            // Check if message already exists (avoid duplicates)
+            if (prev.some(m => m.message_id === message.message_id)) {
+              return prev;
+            }
+            // Insert in correct position based on index
+            const newMessages = [...prev, message];
+            // CRITICAL: Create NEW array for sort to trigger React re-renders
+            // .sort() mutates in place, which breaks useMemo dependencies
+            return [...newMessages].sort((a, b) => a.index - b.index);
+          });
         });
       }
     };

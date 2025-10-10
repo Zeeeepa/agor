@@ -13,14 +13,11 @@
  */
 
 import type { AgorClient } from '@agor/core/api';
-import type { Message, SessionID, Task } from '@agor/core/types';
-import { Alert, Empty, Spin, Typography } from 'antd';
+import type { SessionID } from '@agor/core/types';
+import { Alert, Empty, Spin } from 'antd';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useMessages, useTasks } from '../../hooks';
-import { MessageBlock } from '../MessageBlock';
 import { TaskBlock } from '../TaskBlock';
-
-const { Text } = Typography;
 
 export interface ConversationViewProps {
   /**
@@ -81,11 +78,6 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     }));
   }, [tasks, messages]);
 
-  // Find orphaned messages (messages without a task_id)
-  const orphanedMessages = useMemo(() => {
-    return messages.filter(msg => !msg.task_id);
-  }, [messages]);
-
   // Auto-scroll to bottom when new messages arrive
   // biome-ignore lint/correctness/useExhaustiveDependencies: We want to scroll on messages change
   useEffect(() => {
@@ -131,18 +123,6 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
         padding: '12px',
       }}
     >
-      {/* Orphaned messages (messages without task_id) */}
-      {orphanedMessages.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          <Text type="secondary" style={{ fontSize: 12, fontStyle: 'italic' }}>
-            Messages without associated tasks:
-          </Text>
-          {orphanedMessages.map(message => (
-            <MessageBlock key={message.message_id} message={message} />
-          ))}
-        </div>
-      )}
-
       {/* Task-organized conversation */}
       {taskWithMessages.map(({ task, messages: taskMessages }, index) => (
         <TaskBlock
