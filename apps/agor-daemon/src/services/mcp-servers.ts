@@ -19,6 +19,7 @@ import { DrizzleService } from '../adapters/drizzle';
  * MCP Server service params
  */
 export interface MCPServerParams extends Params {
+  paginate?: false | { default: number; max: number };
   query?: {
     scope?: string;
     scopeId?: string;

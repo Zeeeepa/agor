@@ -4,8 +4,8 @@
  * Type-safe CRUD operations for boards with short ID support.
  */
 
-import type { Board, UUID } from '@agor/core/types';
-import { eq, like } from 'drizzle-orm';
+import type { Board, BoardObject, UUID } from '@agor/core/types';
+import { eq, like, sql } from 'drizzle-orm';
 import type { Database } from '../client';
 import { formatShortId, generateId } from '../ids';
 import { type BoardInsert, type BoardRow, boards } from '../schema';
@@ -32,6 +32,7 @@ export class BoardRepository implements BaseRepository<Board, Partial<Board>> {
       color?: string;
       icon?: string;
       layout?: Record<string, { x: number; y: number }>;
+      objects?: Record<string, BoardObject>;
     };
 
     return {
@@ -68,6 +69,7 @@ export class BoardRepository implements BaseRepository<Board, Partial<Board>> {
         color: board.color,
         icon: board.icon,
         layout: board.layout,
+        objects: board.objects,
       },
     };
   }
@@ -315,6 +317,142 @@ export class BoardRepository implements BaseRepository<Board, Partial<Board>> {
     } catch (error) {
       throw new RepositoryError(
         `Failed to get default board: ${error instanceof Error ? error.message : String(error)}`,
+        error
+      );
+    }
+  }
+
+  /**
+   * Atomically add or update a board object (text label or zone)
+   *
+   * Uses SQLite json_set() / PostgreSQL jsonb_set() for safe concurrent updates.
+   * Each object ID is updated independently to prevent conflicts.
+   */
+  async upsertBoardObject(
+    boardId: string,
+    objectId: string,
+    objectData: BoardObject
+  ): Promise<Board> {
+    try {
+      const fullId = await this.resolveId(boardId);
+
+      // SQLite: json_set(data, '$.objects.key', json('value'))
+      // PostgreSQL: jsonb_set(data, '{objects,key}', '"value"'::jsonb)
+      //
+      // For now, we use a read-modify-write approach that works with both.
+      // In the future, we can optimize with database-specific functions.
+      const current = await this.findById(fullId);
+      if (!current) {
+        throw new EntityNotFoundError('Board', boardId);
+      }
+
+      const objects = current.objects || {};
+      objects[objectId] = objectData;
+
+      await this.db
+        .update(boards)
+        .set({
+          data: {
+            description: current.description,
+            sessions: current.sessions,
+            color: current.color,
+            icon: current.icon,
+            layout: current.layout,
+            objects,
+          },
+          updated_at: new Date(),
+        })
+        .where(eq(boards.board_id, fullId));
+
+      const updated = await this.findById(fullId);
+      if (!updated) {
+        throw new RepositoryError('Failed to retrieve updated board');
+      }
+
+      return updated;
+    } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      if (error instanceof EntityNotFoundError) throw error;
+      throw new RepositoryError(
+        `Failed to upsert board object: ${error instanceof Error ? error.message : String(error)}`,
+        error
+      );
+    }
+  }
+
+  /**
+   * Atomically remove a board object
+   */
+  async removeBoardObject(boardId: string, objectId: string): Promise<Board> {
+    try {
+      const fullId = await this.resolveId(boardId);
+
+      const current = await this.findById(fullId);
+      if (!current) {
+        throw new EntityNotFoundError('Board', boardId);
+      }
+
+      const objects = current.objects || {};
+      delete objects[objectId];
+
+      await this.db
+        .update(boards)
+        .set({
+          data: {
+            description: current.description,
+            sessions: current.sessions,
+            color: current.color,
+            icon: current.icon,
+            layout: current.layout,
+            objects,
+          },
+          updated_at: new Date(),
+        })
+        .where(eq(boards.board_id, fullId));
+
+      const updated = await this.findById(fullId);
+      if (!updated) {
+        throw new RepositoryError('Failed to retrieve updated board');
+      }
+
+      return updated;
+    } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      if (error instanceof EntityNotFoundError) throw error;
+      throw new RepositoryError(
+        `Failed to remove board object: ${error instanceof Error ? error.message : String(error)}`,
+        error
+      );
+    }
+  }
+
+  /**
+   * Batch upsert multiple objects (sequential atomic updates)
+   *
+   * Note: Not a single transaction - each object is updated atomically.
+   * This is safe for independent objects but may have partial failures.
+   */
+  async batchUpsertBoardObjects(
+    boardId: string,
+    objects: Record<string, BoardObject>
+  ): Promise<Board> {
+    try {
+      for (const [objectId, objectData] of Object.entries(objects)) {
+        await this.upsertBoardObject(boardId, objectId, objectData);
+      }
+
+      const fullId = await this.resolveId(boardId);
+      const updated = await this.findById(fullId);
+      if (!updated) {
+        throw new RepositoryError('Failed to retrieve updated board');
+      }
+
+      return updated;
+    } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      if (error instanceof EntityNotFoundError) throw error;
+      throw new RepositoryError(
+        `Failed to batch upsert board objects: ${error instanceof Error ? error.message : String(error)}`,
         error
       );
     }

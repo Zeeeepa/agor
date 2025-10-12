@@ -220,6 +220,33 @@ async function main() {
           return context;
         },
       ],
+      patch: [
+        async context => {
+          // Handle atomic board object operations via _action parameter
+          // biome-ignore lint/suspicious/noExplicitAny: Data type depends on action
+          const { _action, objectId, objectData, objects } = (context.data || {}) as any;
+
+          if (_action === 'upsertObject' && objectId && objectData) {
+            const result = await boardsService.upsertBoardObject(context.id, objectId, objectData);
+            context.result = result;
+            return context;
+          }
+
+          if (_action === 'removeObject' && objectId) {
+            const result = await boardsService.removeBoardObject(context.id, objectId);
+            context.result = result;
+            return context;
+          }
+
+          if (_action === 'batchUpsertObjects' && objects) {
+            const result = await boardsService.batchUpsertBoardObjects(context.id, objects);
+            context.result = result;
+            return context;
+          }
+
+          return context;
+        },
+      ],
     },
   });
 

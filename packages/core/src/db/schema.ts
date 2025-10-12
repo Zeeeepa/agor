@@ -192,6 +192,7 @@ export const boards = sqliteTable(
         color?: string;
         icon?: string;
         layout?: Record<string, { x: number; y: number }>; // Session positions
+        objects?: Record<string, import('@agor/core/types').BoardObject>; // Board objects (text, zone)
       }>()
       .notNull(),
   },

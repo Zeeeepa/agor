@@ -6,7 +6,7 @@
  */
 
 import { BoardRepository, type Database } from '@agor/core/db';
-import type { Board } from '@agor/core/types';
+import type { Board, BoardObject } from '@agor/core/types';
 import type { Params } from '@feathersjs/feathers';
 import { DrizzleService } from '../adapters/drizzle';
 
@@ -87,6 +87,40 @@ export class BoardsService extends DrizzleService<Board, Partial<Board>, BoardPa
       },
       params
     ) as Promise<Board>;
+  }
+
+  /**
+   * Custom method: Atomically add or update a board object
+   */
+  async upsertBoardObject(
+    boardId: string,
+    objectId: string,
+    objectData: BoardObject,
+    _params?: BoardParams
+  ): Promise<Board> {
+    return this.boardRepo.upsertBoardObject(boardId, objectId, objectData);
+  }
+
+  /**
+   * Custom method: Atomically remove a board object
+   */
+  async removeBoardObject(
+    boardId: string,
+    objectId: string,
+    _params?: BoardParams
+  ): Promise<Board> {
+    return this.boardRepo.removeBoardObject(boardId, objectId);
+  }
+
+  /**
+   * Custom method: Batch upsert board objects
+   */
+  async batchUpsertBoardObjects(
+    boardId: string,
+    objects: Record<string, BoardObject>,
+    _params?: BoardParams
+  ): Promise<Board> {
+    return this.boardRepo.batchUpsertBoardObjects(boardId, objects);
   }
 }
 
