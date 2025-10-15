@@ -4,6 +4,7 @@ import { Layout } from 'antd';
 import { useState } from 'react';
 import type { Agent, Board, Session, Task } from '../../types';
 import { AppHeader } from '../AppHeader';
+import type { ModelConfig } from '../ModelSelector';
 import { NewSessionButton } from '../NewSessionButton';
 import {
   type NewSessionConfig,
@@ -13,6 +14,7 @@ import {
 import { SessionCanvas } from '../SessionCanvas';
 import SessionDrawer from '../SessionDrawer';
 import { SessionListDrawer } from '../SessionListDrawer';
+import { SessionSettingsModal } from '../SessionSettingsModal';
 import { SettingsModal } from '../SettingsModal';
 
 const { Content } = Layout;
@@ -101,6 +103,7 @@ export const App: React.FC<AppProps> = ({
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [listDrawerOpen, setListDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sessionSettingsId, setSessionSettingsId] = useState<string | null>(null);
   const [currentBoardId, setCurrentBoardId] = useState(initialBoardId || boards[0]?.board_id || '');
 
   const handleCreateSession = (config: NewSessionConfig) => {
@@ -174,7 +177,19 @@ export const App: React.FC<AppProps> = ({
     }
   };
 
+  const handleUpdateModelConfig = (sessionId: string, modelConfig: ModelConfig) => {
+    onUpdateSession?.(sessionId, {
+      model_config: {
+        ...modelConfig,
+        updated_at: new Date().toISOString(),
+      },
+    });
+  };
+
   const selectedSession = sessions.find(s => s.session_id === selectedSessionId) || null;
+  const sessionSettingsSession = sessionSettingsId
+    ? sessions.find(s => s.session_id === sessionSettingsId)
+    : null;
   const selectedSessionTasks = selectedSessionId ? tasks[selectedSessionId] || [] : [];
   const currentBoard = boards.find(b => b.board_id === currentBoardId);
 
@@ -208,8 +223,7 @@ export const App: React.FC<AppProps> = ({
           onSessionDelete={onDeleteSession}
           onUpdateSessionMcpServers={onUpdateSessionMcpServers}
           onOpenSettings={sessionId => {
-            console.log('Open settings for session:', sessionId);
-            // TODO: Programmatically open SessionCard modal
+            setSessionSettingsId(sessionId);
           }}
         />
         <NewSessionButton onClick={() => setModalOpen(true)} />
@@ -237,8 +251,7 @@ export const App: React.FC<AppProps> = ({
         onSubtask={handleSubtask}
         onPermissionDecision={handlePermissionDecision}
         onOpenSettings={sessionId => {
-          console.log('Open settings for session from drawer:', sessionId);
-          // TODO: Programmatically trigger SessionCard modal
+          setSessionSettingsId(sessionId);
         }}
       />
       <SessionListDrawer
@@ -271,6 +284,20 @@ export const App: React.FC<AppProps> = ({
         onUpdateMCPServer={onUpdateMCPServer}
         onDeleteMCPServer={onDeleteMCPServer}
       />
+      {sessionSettingsSession && (
+        <SessionSettingsModal
+          open={!!sessionSettingsId}
+          onClose={() => setSessionSettingsId(null)}
+          session={sessionSettingsSession}
+          mcpServers={mcpServers}
+          sessionMcpServerIds={
+            sessionSettingsId ? sessionMcpServerIds[sessionSettingsId] || [] : []
+          }
+          onUpdate={onUpdateSession}
+          onUpdateSessionMcpServers={onUpdateSessionMcpServers}
+          onUpdateModelConfig={handleUpdateModelConfig}
+        />
+      )}
     </Layout>
   );
 };

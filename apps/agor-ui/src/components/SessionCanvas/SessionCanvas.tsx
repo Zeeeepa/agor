@@ -44,13 +44,10 @@ interface SessionNodeData {
   tasks: Task[];
   users: User[];
   currentUserId?: string;
-  mcpServers: MCPServer[];
-  sessionMcpServerIds: string[];
   onTaskClick?: (taskId: string) => void;
   onSessionClick?: () => void;
-  onUpdate?: (sessionId: string, updates: Partial<Session>) => void;
   onDelete?: (sessionId: string) => void;
-  onUpdateSessionMcpServers?: (sessionId: string, mcpServerIds: string[]) => void;
+  onOpenSettings?: (sessionId: string) => void;
   compact?: boolean;
 }
 
@@ -63,14 +60,11 @@ const SessionNode = ({ data }: { data: SessionNodeData }) => {
         tasks={data.tasks}
         users={data.users}
         currentUserId={data.currentUserId}
-        mcpServers={data.mcpServers}
-        sessionMcpServerIds={data.sessionMcpServerIds}
         onTaskClick={data.onTaskClick}
         onSessionClick={data.onSessionClick}
-        onUpdate={data.onUpdate}
         onDelete={data.onDelete}
-        onUpdateSessionMcpServers={data.onUpdateSessionMcpServers}
-        compact={data.compact}
+        onOpenSettings={data.onOpenSettings}
+        defaultExpanded={!data.compact}
       />
     </div>
   );
@@ -187,13 +181,10 @@ const SessionCanvas = ({
           tasks: tasks[session.session_id] || [],
           users,
           currentUserId,
-          mcpServers,
-          sessionMcpServerIds: sessionMcpServerIds[session.session_id] || [],
           onTaskClick,
           onSessionClick: () => onSessionClick?.(session.session_id),
-          onUpdate: onSessionUpdate,
           onDelete: onSessionDelete,
-          onUpdateSessionMcpServers,
+          onOpenSettings,
           compact: false,
         },
       };
@@ -204,13 +195,10 @@ const SessionCanvas = ({
     tasks,
     users,
     currentUserId,
-    mcpServers,
-    sessionMcpServerIds,
     onSessionClick,
     onTaskClick,
-    onSessionUpdate,
     onSessionDelete,
-    onUpdateSessionMcpServers,
+    onOpenSettings,
   ]);
 
   // Convert session relationships to React Flow edges

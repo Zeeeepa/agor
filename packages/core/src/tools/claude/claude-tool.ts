@@ -21,6 +21,7 @@ import type { Message, MessageID, SessionID, TaskID, ToolUse } from '../../types
 import type { ImportOptions, ITool, SessionData, ToolCapabilities } from '../base';
 import { loadClaudeSession } from './import/load-session';
 import { transcriptsToMessages } from './import/message-converter';
+import { DEFAULT_CLAUDE_MODEL } from './models';
 import { ClaudePromptService } from './prompt-service';
 
 /**
@@ -54,9 +55,6 @@ export interface SessionsService {
 export class ClaudeTool implements ITool {
   readonly toolType = 'claude-code' as const;
   readonly name = 'Claude Code';
-
-  /** Claude model used for live execution */
-  private static readonly CLAUDE_MODEL = 'claude-sonnet-4-5-20250929';
 
   private promptService?: ClaudePromptService;
 
@@ -174,6 +172,7 @@ export class ClaudeTool implements ITool {
     // Execute prompt via Agent SDK with streaming
     const assistantMessageIds: MessageID[] = [];
     let capturedAgentSessionId: string | undefined;
+    let resolvedModel: string | undefined;
     let currentMessageId: MessageID | null = null;
     let streamStartTime = Date.now();
     let firstTokenTime: number | null = null;
@@ -184,6 +183,11 @@ export class ClaudeTool implements ITool {
       taskId,
       permissionMode
     )) {
+      // Capture resolved model from first event
+      if (!resolvedModel && event.resolvedModel) {
+        resolvedModel = event.resolvedModel;
+      }
+
       // Capture Agent SDK session_id
       if (!capturedAgentSessionId && event.agentSessionId) {
         capturedAgentSessionId = event.agentSessionId;
@@ -237,7 +241,8 @@ export class ClaudeTool implements ITool {
           event.content,
           event.toolUses,
           taskId,
-          nextIndex++
+          nextIndex++,
+          resolvedModel
         );
         assistantMessageIds.push(assistantMessageId);
 
@@ -311,7 +316,8 @@ export class ClaudeTool implements ITool {
     }>,
     toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> | undefined,
     taskId: TaskID | undefined,
-    nextIndex: number
+    nextIndex: number,
+    resolvedModel?: string
   ): Promise<Message> {
     // Extract text content for preview
     const textBlocks = content.filter(b => b.type === 'text').map(b => b.text || '');
@@ -330,7 +336,7 @@ export class ClaudeTool implements ITool {
       tool_uses: toolUses,
       task_id: taskId,
       metadata: {
-        model: ClaudeTool.CLAUDE_MODEL,
+        model: resolvedModel || DEFAULT_CLAUDE_MODEL,
         tokens: {
           input: 0, // TODO: Extract from SDK
           output: 0,
@@ -339,6 +345,12 @@ export class ClaudeTool implements ITool {
     };
 
     await this.messagesService!.create(message);
+
+    // If task exists, update it with resolved model
+    if (taskId && resolvedModel && this.tasksService) {
+      await this.tasksService.patch(taskId, { model: resolvedModel });
+    }
+
     return message;
   }
 
@@ -375,6 +387,7 @@ export class ClaudeTool implements ITool {
     // Execute prompt via Agent SDK
     const assistantMessageIds: MessageID[] = [];
     let capturedAgentSessionId: string | undefined;
+    let resolvedModel: string | undefined;
 
     for await (const event of this.promptService.promptSessionStreaming(
       sessionId,
@@ -382,6 +395,11 @@ export class ClaudeTool implements ITool {
       taskId,
       permissionMode
     )) {
+      // Capture resolved model from first event
+      if (!resolvedModel && event.resolvedModel) {
+        resolvedModel = event.resolvedModel;
+      }
+
       // Capture Agent SDK session_id
       if (!capturedAgentSessionId && event.agentSessionId) {
         capturedAgentSessionId = event.agentSessionId;
@@ -402,7 +420,8 @@ export class ClaudeTool implements ITool {
           event.content,
           event.toolUses,
           taskId,
-          nextIndex++
+          nextIndex++,
+          resolvedModel
         );
         assistantMessageIds.push(messageId);
       }

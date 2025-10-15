@@ -84,6 +84,7 @@ See [context/explorations/](context/explorations/) for detailed designs:
 
 # Critical path
 
+- [ ] model picker for claude
 - [ ] wrap up permissions-handling in Claude Code (currently, "allow for this session" doesn't session)
 - [ ] attach proper git sha to tasks: what was the latest commit when the task was created, mark whether -dirty or not
 - [ ] integrate concepts and reports in the information architecture

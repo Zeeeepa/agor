@@ -1,9 +1,11 @@
 import type { MCPServer } from '@agor/core/types';
+import { DownOutlined } from '@ant-design/icons';
 import { Collapse, Form, Input, Modal, Radio, Select, Space, Typography } from 'antd';
 import { useState } from 'react';
 import type { Agent } from '../../types';
 import { AgentSelectionCard } from '../AgentSelectionCard';
 import { MCPServerSelect } from '../MCPServerSelect';
+import { type ModelConfig, ModelSelector } from '../ModelSelector';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -39,7 +41,8 @@ export interface NewSessionConfig {
   initialWorktreeName?: string;
   initialWorktreeBranch?: string;
 
-  // MCP server associations
+  // Advanced configuration
+  modelConfig?: ModelConfig;
   mcpServerIds?: string[];
 }
 
@@ -69,34 +72,42 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   const [form] = Form.useForm();
   const [selectedAgent, setSelectedAgent] = useState<string | null>('claude-code');
   const [repoSetupMode, setRepoSetupMode] = useState<RepoSetupMode>('existing-worktree');
+  const [isFormValid, setIsFormValid] = useState(false);
 
   const handleCreate = () => {
-    form.validateFields().then(values => {
-      if (!selectedAgent) {
-        return;
-      }
+    form
+      .validateFields()
+      .then(values => {
+        if (!selectedAgent) {
+          return;
+        }
 
-      onCreate({
-        agent: selectedAgent,
-        title: values.title,
-        initialPrompt: values.initialPrompt,
-        repoSetupMode,
-        worktreeRef: values.worktreeRef,
-        existingRepoSlug: values.existingRepoSlug,
-        newWorktreeName: values.newWorktreeName,
-        newWorktreeBranch: values.newWorktreeBranch,
-        gitUrl: values.gitUrl,
-        repoSlug: values.repoSlug,
-        initialWorktreeName: values.initialWorktreeName,
-        initialWorktreeBranch: values.initialWorktreeBranch,
-        mcpServerIds: values.mcpServerIds,
+        onCreate({
+          agent: selectedAgent,
+          title: values.title,
+          initialPrompt: values.initialPrompt,
+          repoSetupMode,
+          worktreeRef: values.worktreeRef,
+          existingRepoSlug: values.existingRepoSlug,
+          newWorktreeName: values.newWorktreeName,
+          newWorktreeBranch: values.newWorktreeBranch,
+          gitUrl: values.gitUrl,
+          repoSlug: values.repoSlug,
+          initialWorktreeName: values.initialWorktreeName,
+          initialWorktreeBranch: values.initialWorktreeBranch,
+          modelConfig: values.modelConfig,
+          mcpServerIds: values.mcpServerIds,
+        });
+
+        form.resetFields();
+        setSelectedAgent('claude-code');
+        setRepoSetupMode('existing-worktree');
+        onClose();
+      })
+      .catch(errorInfo => {
+        // Validation failed - form will show errors automatically
+        console.log('Validation failed:', errorInfo);
       });
-
-      form.resetFields();
-      setSelectedAgent('claude-code');
-      setRepoSetupMode('existing-worktree');
-      onClose();
-    });
   };
 
   const handleCancel = () => {
@@ -111,6 +122,18 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
     // TODO: Implement installation flow
   };
 
+  // Validate form whenever fields change
+  const handleFormChange = () => {
+    form
+      .validateFields()
+      .then(() => {
+        setIsFormValid(true);
+      })
+      .catch(() => {
+        setIsFormValid(false);
+      });
+  };
+
   return (
     <Modal
       title="Create New Session"
@@ -121,11 +144,20 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
       cancelText="Cancel"
       width={600}
       okButtonProps={{
-        disabled: !selectedAgent,
-        title: !selectedAgent ? 'Please select an agent to continue' : undefined,
+        disabled: !selectedAgent || !isFormValid,
+        title: !selectedAgent
+          ? 'Please select an agent to continue'
+          : !isFormValid
+            ? 'Please fill in all required fields'
+            : undefined,
       }}
     >
-      <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+      <Form
+        form={form}
+        layout="vertical"
+        style={{ marginTop: 16 }}
+        onFieldsChange={handleFormChange}
+      >
         <Form.Item label="Select Coding Agent" required>
           <Space direction="vertical" style={{ width: '100%' }} size="small">
             {!selectedAgent && (
@@ -248,13 +280,36 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
           />
         </Form.Item>
 
-        <Form.Item
-          name="mcpServerIds"
-          label="MCP Servers (optional)"
-          help="Select MCP servers to make available in this session"
-        >
-          <MCPServerSelect mcpServers={mcpServers} />
-        </Form.Item>
+        <Collapse
+          ghost
+          expandIcon={({ isActive }) => <DownOutlined rotate={isActive ? 180 : 0} />}
+          items={[
+            {
+              key: 'advanced',
+              label: <Text strong>Advanced Configuration</Text>,
+              children: (
+                <>
+                  <Form.Item
+                    name="modelConfig"
+                    label="Claude Model"
+                    help="Choose which Claude model to use (defaults to claude-sonnet-4-5-latest)"
+                  >
+                    <ModelSelector />
+                  </Form.Item>
+
+                  <Form.Item
+                    name="mcpServerIds"
+                    label="MCP Servers"
+                    help="Select MCP servers to make available in this session"
+                  >
+                    <MCPServerSelect mcpServers={mcpServers} />
+                  </Form.Item>
+                </>
+              ),
+            },
+          ]}
+          style={{ marginTop: 16 }}
+        />
       </Form>
     </Modal>
   );

@@ -21,9 +21,11 @@ import {
   LockOutlined,
   MessageOutlined,
   RightOutlined,
+  RobotOutlined,
   ToolOutlined,
 } from '@ant-design/icons';
-import { Collapse, Space, Spin, Tag, Typography, theme } from 'antd';
+import { Bubble } from '@ant-design/x';
+import { Avatar, Collapse, Space, Spin, Tag, Typography, theme } from 'antd';
 import type React from 'react';
 import { useMemo } from 'react';
 import { AgentChain } from '../AgentChain';
@@ -141,6 +143,12 @@ export const TaskBlock: React.FC<TaskBlockProps> = ({
   // Group messages into blocks
   const blocks = useMemo(() => groupMessagesIntoBlocks(messages), [messages]);
 
+  // Check if we have any assistant messages (user message exists, but no assistant response yet)
+  const hasAssistantMessages = useMemo(
+    () => messages.some(msg => msg.role === 'assistant'),
+    [messages]
+  );
+
   const getStatusIcon = () => {
     switch (task.status) {
       case 'completed':
@@ -253,29 +261,43 @@ export const TaskBlock: React.FC<TaskBlockProps> = ({
           },
           children: (
             <div style={{ paddingTop: token.sizeUnit }}>
-              {blocks.length === 0 ? (
-                <Text type="secondary" style={{ fontStyle: 'italic' }}>
-                  No messages in this task
-                </Text>
-              ) : (
-                blocks.map(block => {
-                  if (block.type === 'message') {
-                    return (
-                      <MessageBlock
-                        key={block.message.message_id}
-                        message={block.message}
-                        users={users}
-                        currentUserId={task.created_by}
+              {/* Render all message blocks */}
+              {blocks.map(block => {
+                if (block.type === 'message') {
+                  return (
+                    <MessageBlock
+                      key={block.message.message_id}
+                      message={block.message}
+                      users={users}
+                      currentUserId={task.created_by}
+                      isTaskRunning={task.status === 'running'}
+                    />
+                  );
+                }
+                if (block.type === 'agent-chain') {
+                  // Use first message ID as key for agent chain
+                  const blockKey = `agent-chain-${block.messages[0]?.message_id || 'unknown'}`;
+                  return <AgentChain key={blockKey} messages={block.messages} />;
+                }
+                return null;
+              })}
+
+              {/* Show loading bubble if task is running but no assistant response yet */}
+              {task.status === 'running' && !hasAssistantMessages && (
+                <div style={{ margin: `${token.sizeUnit}px 0` }}>
+                  <Bubble
+                    placement="start"
+                    avatar={
+                      <Avatar
+                        icon={<RobotOutlined />}
+                        style={{ backgroundColor: token.colorSuccess }}
                       />
-                    );
-                  }
-                  if (block.type === 'agent-chain') {
-                    // Use first message ID as key for agent chain
-                    const blockKey = `agent-chain-${block.messages[0]?.message_id || 'unknown'}`;
-                    return <AgentChain key={blockKey} messages={block.messages} />;
-                  }
-                  return null;
-                })
+                    }
+                    loading={true}
+                    content=""
+                    variant="outlined"
+                  />
+                </div>
               )}
 
               {/* Show permission request (active or historical) */}

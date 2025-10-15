@@ -10,6 +10,7 @@ export default defineConfig({
     'claude/index': 'src/claude/index.ts',
     'config/index': 'src/config/index.ts',
     'tools/index': 'src/tools/index.ts',
+    'tools/claude/models': 'src/tools/claude/models.ts',
     'permissions/index': 'src/permissions/index.ts',
   },
   format: ['cjs', 'esm'],

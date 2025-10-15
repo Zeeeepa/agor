@@ -42,17 +42,29 @@ interface MessageBlockProps {
   message: Message | (Message & { isStreaming?: boolean });
   users?: User[];
   currentUserId?: string;
+  isTaskRunning?: boolean; // Whether the task is running (for loading state)
 }
 
 export const MessageBlock: React.FC<MessageBlockProps> = ({
   message,
   users = [],
   currentUserId,
+  isTaskRunning = false,
 }) => {
   const { token } = theme.useToken();
   const isUser = message.role === 'user';
   // Check if message is currently streaming
   const isStreaming = 'isStreaming' in message && message.isStreaming === true;
+
+  // Determine loading vs typing state:
+  // - loading: task is running but no streaming chunks yet (waiting for first token)
+  // - typing: streaming has started (we have content)
+  const hasContent =
+    typeof message.content === 'string'
+      ? message.content.trim().length > 0
+      : Array.isArray(message.content) && message.content.length > 0;
+  const isLoading = isTaskRunning && !hasContent && message.role === 'assistant';
+  const shouldUseTyping = isStreaming && hasContent;
 
   // Get current user's emoji
   const currentUser = users.find(u => u.user_id === currentUserId);
@@ -151,25 +163,14 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({
                 <Avatar icon={<RobotOutlined />} style={{ backgroundColor: token.colorSuccess }} />
               )
             }
+            loading={isLoading}
+            typing={shouldUseTyping ? { step: 5, interval: 20 } : false}
             content={
               <div style={{ wordWrap: 'break-word' }}>
                 {isUser ? (
                   textBeforeTools.filter(t => t.trim()).join('\n\n')
                 ) : (
-                  <>
-                    <MarkdownRenderer content={textBeforeTools} inline />
-                    {isStreaming && (
-                      <span
-                        style={{
-                          marginLeft: '2px',
-                          animation: 'blink 1s infinite',
-                          display: 'inline-block',
-                        }}
-                      >
-                        ▊
-                      </span>
-                    )}
-                  </>
+                  <MarkdownRenderer content={textBeforeTools} inline />
                 )}
               </div>
             }
@@ -201,20 +202,11 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({
             avatar={
               <Avatar icon={<RobotOutlined />} style={{ backgroundColor: token.colorSuccess }} />
             }
+            loading={isLoading}
+            typing={shouldUseTyping ? { step: 5, interval: 20 } : false}
             content={
               <div style={{ wordWrap: 'break-word' }}>
                 <MarkdownRenderer content={textAfterTools} inline />
-                {isStreaming && (
-                  <span
-                    style={{
-                      marginLeft: '2px',
-                      animation: 'blink 1s infinite',
-                      display: 'inline-block',
-                    }}
-                  >
-                    ▊
-                  </span>
-                )}
               </div>
             }
             variant="outlined"

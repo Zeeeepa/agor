@@ -61,4 +61,16 @@ export interface Session {
   permission_config?: {
     allowedTools?: string[];
   };
+
+  // Model configuration (session-level model selection)
+  model_config?: {
+    /** Model selection mode: alias (e.g., 'claude-sonnet-4-5-latest') or exact (e.g., 'claude-sonnet-4-5-20250929') */
+    mode: 'alias' | 'exact';
+    /** Model identifier (alias or exact ID) */
+    model: string;
+    /** When this config was last updated */
+    updated_at: string;
+    /** Optional user notes about why this model was selected */
+    notes?: string;
+  };
 }

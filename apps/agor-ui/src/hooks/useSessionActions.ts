@@ -73,6 +73,12 @@ export function useSessionActions(client: AgorClient | null): UseSessionActionsR
           base_sha: 'HEAD',
           current_sha: 'HEAD',
         },
+        model_config: config.modelConfig
+          ? {
+              ...config.modelConfig,
+              updated_at: new Date().toISOString(),
+            }
+          : undefined,
         concepts: [],
         genealogy: {
           children: [],

@@ -21,6 +21,7 @@ import type { SessionRepository } from '../../db/repositories/sessions';
 import type { PermissionService } from '../../permissions/permission-service';
 import type { MCPServersConfig, Message, SessionID, TaskID } from '../../types';
 import type { SessionsService, TasksService } from './claude-tool';
+import { DEFAULT_CLAUDE_MODEL } from './models';
 
 /**
  * Get path to Claude Code executable
@@ -78,9 +79,6 @@ export interface PromptResult {
 export class ClaudePromptService {
   /** Enable token-level streaming from Claude Agent SDK */
   private static readonly ENABLE_TOKEN_STREAMING = true;
-
-  /** Claude model for live execution */
-  private static readonly CLAUDE_MODEL = 'claude-sonnet-4-5-20250929';
 
   constructor(
     private messagesRepo: MessagesRepository,
@@ -267,7 +265,7 @@ export class ClaudePromptService {
             );
           } else if (decision.scope === 'project') {
             // Update project-level permissions in .claude/settings.json
-            await this.updateProjectSettings(session.repo.cwd, {
+            await this.updateProjectSettings(freshSession.repo.cwd, {
               allowTools: [input.tool_name],
             });
             console.log(`🛡️  Saved ${input.tool_name} to project permissions`);
@@ -372,11 +370,19 @@ export class ClaudePromptService {
     taskId?: TaskID,
     permissionMode?: PermissionMode,
     resume = true
-  ) {
+  ): Promise<{ query: AsyncGenerator; resolvedModel: string }> {
     const session = await this.sessionsRepo.findById(sessionId);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
     }
+
+    // Determine model to use (session config or default)
+    const modelConfig = session.model_config;
+    const model = modelConfig?.model || DEFAULT_CLAUDE_MODEL;
+
+    console.log(`🤖 Model selection:`);
+    console.log(`   Mode: ${modelConfig?.mode || 'default (no config)'}`);
+    console.log(`   Model: ${model}`);
 
     this.logPromptStart(
       sessionId,
@@ -389,7 +395,7 @@ export class ClaudePromptService {
       cwd: session.repo.cwd,
       systemPrompt: { type: 'preset', preset: 'claude_code' },
       settingSources: ['user', 'project'], // Load user + project permissions, auto-loads CLAUDE.md
-      model: ClaudePromptService.CLAUDE_MODEL,
+      model, // Use configured model or default
       pathToClaudeCodeExecutable: getClaudeCodePath(),
       // Allow access to common directories outside CWD (e.g., /tmp)
       additionalDirectories: ['/tmp', '/var/tmp'],
@@ -506,7 +512,7 @@ export class ClaudePromptService {
       options: options as any,
     });
 
-    return result;
+    return { query: result, resolvedModel: model };
   }
 
   /**
@@ -628,8 +634,15 @@ export class ClaudePromptService {
     }>;
     toolUses?: Array<{ id: string; name: string; input: Record<string, unknown> }>;
     agentSessionId?: string;
+    resolvedModel?: string;
   }> {
-    const result = await this.setupQuery(sessionId, prompt, taskId, permissionMode, true);
+    const { query: result, resolvedModel } = await this.setupQuery(
+      sessionId,
+      prompt,
+      taskId,
+      permissionMode,
+      true
+    );
 
     // Collect and yield assistant messages progressively
     console.log('📥 Receiving messages from Agent SDK...');
@@ -661,6 +674,7 @@ export class ClaudePromptService {
             type: 'partial',
             textChunk,
             agentSessionId: capturedAgentSessionId,
+            resolvedModel,
           };
         }
       }
@@ -677,6 +691,7 @@ export class ClaudePromptService {
           content: contentBlocks,
           toolUses: toolUses.length > 0 ? toolUses : undefined,
           agentSessionId: capturedAgentSessionId,
+          resolvedModel,
         };
       } else if (msg.type === 'result') {
         console.log(`   [Message ${messageCount}] Final result received`);
@@ -704,7 +719,7 @@ export class ClaudePromptService {
    * @returns Complete assistant response with metadata
    */
   async promptSession(sessionId: SessionID, prompt: string): Promise<PromptResult> {
-    const result = await this.setupQuery(sessionId, prompt, false);
+    const { query: result } = await this.setupQuery(sessionId, prompt, undefined, undefined, false);
 
     // Collect response messages from async generator
     // IMPORTANT: Keep assistant messages SEPARATE (don't merge into one)

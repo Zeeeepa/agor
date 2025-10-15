@@ -40,8 +40,8 @@ export interface Task {
     commit_message?: string;
   };
 
-  // Model
-  model: string;
+  // Model (resolved model ID used for this task, e.g., "claude-sonnet-4-5-20250929")
+  model?: string;
 
   // Report (auto-generated after task completion)
   report?: {

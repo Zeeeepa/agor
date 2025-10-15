@@ -46,6 +46,11 @@
       "import": "./dist/tools/index.js",
       "require": "./dist/tools/index.cjs"
     },
+    "./tools/models": {
+      "types": "./dist/tools/claude/models.d.ts",
+      "import": "./dist/tools/claude/models.js",
+      "require": "./dist/tools/claude/models.cjs"
+    },
     "./permissions": {
       "types": "./dist/permissions/index.d.ts",
       "import": "./dist/permissions/index.js",
