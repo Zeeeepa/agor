@@ -994,29 +994,29 @@ async function main() {
     console.log(`\n⏳ Received ${signal}, shutting down gracefully...`);
 
     try {
-      // Close Socket.io connections first
+      // Close Socket.io connections (this also closes the HTTP server)
       if (socketServer) {
-        console.log('🔌 Closing Socket.io connections...');
+        console.log('🔌 Closing Socket.io and HTTP server...');
         await new Promise<void>(resolve => {
           socketServer?.close(() => {
-            console.log('✅ Socket.io closed');
+            console.log('✅ Server closed');
             resolve();
           });
         });
-      }
-
-      // Close HTTP server
-      await new Promise<void>((resolve, reject) => {
-        server.close(err => {
-          if (err) {
-            console.error('❌ Error closing server:', err);
-            reject(err);
-          } else {
-            console.log('✅ HTTP server closed');
-            resolve();
-          }
+      } else {
+        // Fallback: close HTTP server directly if Socket.io wasn't initialized
+        await new Promise<void>((resolve, reject) => {
+          server.close(err => {
+            if (err) {
+              console.error('❌ Error closing server:', err);
+              reject(err);
+            } else {
+              console.log('✅ HTTP server closed');
+              resolve();
+            }
+          });
         });
-      });
+      }
 
       process.exit(0);
     } catch (error) {
