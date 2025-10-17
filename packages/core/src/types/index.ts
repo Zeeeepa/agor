@@ -9,7 +9,12 @@ export * from './message';
 export * from './presence';
 export * from './repo';
 export * from './report';
-export type { PermissionMode } from './session';
+export type {
+  AgentName,
+  ClaudeCodePermissionMode,
+  CodexPermissionMode,
+  PermissionMode,
+} from './session';
 export * from './session';
 export * from './task';
 export * from './ui';

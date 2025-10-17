@@ -10,7 +10,7 @@ import * as path from 'node:path';
 import { Codex, type Thread, type ThreadItem } from '@openai/codex-sdk';
 import type { MessagesRepository } from '../../db/repositories/messages';
 import type { SessionRepository } from '../../db/repositories/sessions';
-import type { PermissionMode, SessionID, TaskID } from '../../types';
+import type { CodexPermissionMode, PermissionMode, SessionID, TaskID } from '../../types';
 import { DEFAULT_CODEX_MODEL } from './models';
 
 export interface CodexPromptResult {
@@ -106,8 +106,8 @@ export class CodexPromptService {
    * NOTE: approval_policy cannot be passed via ThreadOptions, so we must use config.toml.
    * We minimize file writes by tracking the last set value and only updating when it changes.
    */
-  private async ensureApprovalPolicy(permissionMode: PermissionMode): Promise<void> {
-    const approvalPolicyMap: Record<PermissionMode, string> = {
+  private async ensureApprovalPolicy(permissionMode: CodexPermissionMode): Promise<void> {
+    const approvalPolicyMap: Record<CodexPermissionMode, string> = {
       ask: 'untrusted', // Ask before running any command
       auto: 'on-request', // Model decides when to ask (recommended)
       'on-failure': 'on-failure', // Ask only when commands fail
@@ -239,8 +239,10 @@ approval_policy = "${approvalPolicy}"
     console.log(`   Permission mode: ${permissionMode || 'not specified (will use default)'}`);
     console.log(`   Existing thread ID: ${session.agent_session_id || 'none (will create new)'}`);
 
-    // Determine effective permission mode
-    const effectivePermissionMode = permissionMode || session.permission_config?.mode || 'auto';
+    // Determine effective permission mode (default to 'auto' for Codex)
+    const effectivePermissionMode = (permissionMode ||
+      session.permission_config?.mode ||
+      'auto') as CodexPermissionMode;
 
     // HYBRID APPROACH: Codex permissions require TWO settings:
     // 1. sandboxMode (via ThreadOptions) - controls WHERE you can write
@@ -248,7 +250,7 @@ approval_policy = "${approvalPolicy}"
 
     // Map Agor permission modes to Codex SDK SandboxMode (passed via ThreadOptions)
     const sandboxModeMap: Record<
-      PermissionMode,
+      CodexPermissionMode,
       'read-only' | 'workspace-write' | 'danger-full-access'
     > = {
       ask: 'read-only',
@@ -288,7 +290,7 @@ approval_policy = "${approvalPolicy}"
         console.log(`   Sending slash commands to update thread settings...`);
 
         // Map permission modes to Codex CLI slash command parameters
-        const approvalModeMap: Record<PermissionMode, string> = {
+        const approvalModeMap: Record<CodexPermissionMode, string> = {
           ask: 'untrusted',
           auto: 'on-request',
           'on-failure': 'on-failure',

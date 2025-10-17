@@ -5,7 +5,8 @@
  */
 
 import type { AgorClient } from '@agor/core/api';
-import type { Session, SessionID } from '@agor/core/types';
+import type { AgentName, Session, SessionID } from '@agor/core/types';
+import { getDefaultPermissionMode } from '@agor/core/types';
 import { useState } from 'react';
 import type { NewSessionConfig } from '../components/NewSessionModal';
 
@@ -59,8 +60,9 @@ export function useSessionActions(client: AgorClient | null): UseSessionActionsR
       }
 
       // Create session with repo/worktree data
+      const agent = config.agent as AgentName;
       const newSession = await client.service('sessions').create({
-        agent: config.agent as 'claude-code' | 'cursor' | 'codex' | 'gemini',
+        agent,
         status: 'idle' as const,
         description: config.initialPrompt || config.title || undefined,
         repo: {
@@ -80,7 +82,7 @@ export function useSessionActions(client: AgorClient | null): UseSessionActionsR
             }
           : undefined,
         permission_config: {
-          mode: config.permissionMode || 'auto',
+          mode: config.permissionMode || getDefaultPermissionMode(agent),
         },
         contextFiles: [],
         genealogy: {

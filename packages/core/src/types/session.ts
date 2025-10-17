@@ -31,6 +31,35 @@ export type PermissionMode =
   | 'on-failure'
   | 'allow-all';
 
+/** Claude Code specific permission modes */
+export type ClaudeCodePermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
+
+/** Codex specific permission modes */
+export type CodexPermissionMode = 'ask' | 'auto' | 'on-failure' | 'allow-all';
+
+export type AgentName = 'claude-code' | 'cursor' | 'codex' | 'gemini';
+
+/**
+ * Get the default permission mode for a given agent
+ *
+ * Each agent has different permission mode capabilities and recommended defaults:
+ * - Claude Code: 'acceptEdits' (auto-accept file edits, prompt for other tools)
+ * - Cursor: 'acceptEdits' (same as Claude Code)
+ * - Codex: 'auto' (auto-approve safe operations, ask for dangerous ones)
+ * - Gemini: 'acceptEdits' (same as Claude Code)
+ */
+export function getDefaultPermissionMode(agent: AgentName): PermissionMode {
+  switch (agent) {
+    case 'codex':
+      return 'auto';
+    case 'claude-code':
+    case 'cursor':
+    case 'gemini':
+    default:
+      return 'acceptEdits';
+  }
+}
+
 export interface Session {
   /** Unique session identifier (UUIDv7) */
   session_id: SessionID;

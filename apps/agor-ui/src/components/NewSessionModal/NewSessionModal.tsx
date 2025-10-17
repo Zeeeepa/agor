@@ -1,4 +1,5 @@
-import type { MCPServer, PermissionMode } from '@agor/core/types';
+import type { AgentName as CoreAgentName, MCPServer, PermissionMode } from '@agor/core/types';
+import { getDefaultPermissionMode } from '@agor/core/types';
 import { DownOutlined } from '@ant-design/icons';
 import { Collapse, Form, Input, Modal, Radio, Select, Space, Typography } from 'antd';
 import { useState } from 'react';
@@ -316,7 +317,9 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                     name="permissionMode"
                     label="Permission Mode"
                     help="Control how the agent handles tool execution approvals"
-                    initialValue={selectedAgent === 'codex' ? 'auto' : 'acceptEdits'}
+                    initialValue={getDefaultPermissionMode(
+                      (selectedAgent as CoreAgentName) || 'claude-code'
+                    )}
                   >
                     <PermissionModeSelector agent={(selectedAgent as AgentName) || 'claude-code'} />
                   </Form.Item>
