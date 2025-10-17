@@ -126,7 +126,7 @@ const SessionCard = ({
     <Card
       style={{
         maxWidth: SESSION_CARD_MAX_WIDTH,
-        ...(isPinned && zoneColor ? { borderColor: zoneColor, borderWidth: 2 } : {}),
+        ...(isPinned && zoneColor ? { borderColor: zoneColor, borderWidth: 1 } : {}),
       }}
       styles={{
         body: { padding: 16 },
@@ -183,6 +183,7 @@ const SessionCard = ({
                   e.stopPropagation();
                   onUnpin?.(session.session_id);
                 }}
+                style={{ cursor: 'pointer' }}
                 title={`Pinned to ${zoneName} (click to unpin)`}
               >
                 {zoneName}

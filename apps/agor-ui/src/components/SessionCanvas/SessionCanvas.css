@@ -17,3 +17,12 @@
 }
 
 /* Select mode uses default grab/grabbing cursors from React Flow */
+
+/* Drag handle cursor */
+.drag-handle {
+  cursor: grab;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
