@@ -98,6 +98,10 @@ async function main() {
 
   // Configure REST and Socket.io with CORS
   app.configure(rest());
+
+  // Store Socket.io instance for graceful shutdown
+  let socketServer: import('socket.io').Server | null = null;
+
   app.configure(
     socketio(
       {
@@ -108,6 +112,9 @@ async function main() {
         },
       },
       io => {
+        // Store Socket.io server instance for shutdown
+        socketServer = io;
+
         // Configure Socket.io for cursor presence events
         io.on('connection', socket => {
           console.log('🔌 Socket.io connection established:', socket.id);
@@ -987,24 +994,29 @@ async function main() {
     console.log(`\n⏳ Received ${signal}, shutting down gracefully...`);
 
     try {
-      // Close server and all connections
+      // Close Socket.io connections first
+      if (socketServer) {
+        console.log('🔌 Closing Socket.io connections...');
+        await new Promise<void>(resolve => {
+          socketServer?.close(() => {
+            console.log('✅ Socket.io closed');
+            resolve();
+          });
+        });
+      }
+
+      // Close HTTP server
       await new Promise<void>((resolve, reject) => {
         server.close(err => {
           if (err) {
             console.error('❌ Error closing server:', err);
             reject(err);
           } else {
-            console.log('✅ Server closed');
+            console.log('✅ HTTP server closed');
             resolve();
           }
         });
       });
-
-      // Force exit after 2 seconds if cleanup hangs
-      setTimeout(() => {
-        console.log('⚠️  Forcing exit after timeout');
-        process.exit(0);
-      }, 2000);
 
       process.exit(0);
     } catch (error) {
