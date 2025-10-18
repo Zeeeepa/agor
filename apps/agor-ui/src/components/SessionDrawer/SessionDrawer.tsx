@@ -14,6 +14,7 @@ import {
   Drawer,
   Input,
   Space,
+  Spin,
   Tag,
   Tooltip,
   Typography,
@@ -173,6 +174,9 @@ const SessionDrawer = ({
   const isDirty = session.git_state.current_sha.endsWith('-dirty');
   const _cleanSha = session.git_state.current_sha.replace('-dirty', '');
 
+  // Check if session is currently running (disable prompts to avoid confusion)
+  const isRunning = session.status === 'running';
+
   return (
     <Drawer
       title={
@@ -220,6 +224,9 @@ const SessionDrawer = ({
       styles={{
         body: {
           paddingBottom: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
         },
       }}
     >
@@ -287,12 +294,14 @@ const SessionDrawer = ({
 
       <Divider style={{ margin: `${token.sizeUnit * 2}px 0` }} />
 
-      {/* Task-Centric Conversation View */}
+      {/* Task-Centric Conversation View - Scrollable */}
       <div
         style={{
           flex: 1,
           minHeight: 0,
-          marginBottom: token.sizeUnit * 6,
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
         <ConversationView
@@ -325,6 +334,7 @@ const SessionDrawer = ({
             onChange={e => setInputValue(e.target.value)}
             placeholder="Send a prompt, fork, or create a subtask..."
             autoSize={{ minRows: 1, maxRows: 10 }}
+            disabled={isRunning}
             onPressEnter={e => {
               if (e.shiftKey) {
                 return;
@@ -349,27 +359,30 @@ const SessionDrawer = ({
                 size="small"
                 width={200}
               />
+              {isRunning && <Spin size="small" />}
               <Button.Group>
-                <Tooltip title="Fork Session">
+                <Tooltip title={isRunning ? 'Session is running...' : 'Fork Session'}>
                   <Button
                     icon={<ForkOutlined />}
                     onClick={handleFork}
-                    disabled={!inputValue.trim()}
+                    disabled={isRunning || !inputValue.trim()}
                   />
                 </Tooltip>
-                <Tooltip title="Spawn Subtask">
+                <Tooltip title={isRunning ? 'Session is running...' : 'Spawn Subtask'}>
                   <Button
                     icon={<BranchesOutlined />}
                     onClick={handleSubtask}
-                    disabled={!inputValue.trim()}
+                    disabled={isRunning || !inputValue.trim()}
                   />
                 </Tooltip>
-                <Button
-                  type="primary"
-                  icon={<SendOutlined />}
-                  onClick={handleSendPrompt}
-                  disabled={!inputValue.trim()}
-                />
+                <Tooltip title={isRunning ? 'Session is running...' : 'Send Prompt'}>
+                  <Button
+                    type="primary"
+                    icon={<SendOutlined />}
+                    onClick={handleSendPrompt}
+                    disabled={isRunning || !inputValue.trim()}
+                  />
+                </Tooltip>
               </Button.Group>
             </Space>
           </Space>
