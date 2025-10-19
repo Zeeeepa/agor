@@ -41,7 +41,9 @@ import type {
   User,
 } from '@agor/core/types';
 import { TaskStatus } from '@agor/core/types';
-import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
+// Import Claude SDK's PermissionMode type for ClaudeTool method signatures
+// (Agor's PermissionMode is a superset of all tool permission modes)
+import type { PermissionMode as ClaudePermissionMode } from '@anthropic-ai/claude-agent-sdk';
 
 /**
  * Type guard to check if result is paginated
@@ -684,7 +686,11 @@ async function main() {
 
   app.use('/sessions/:id/prompt', {
     async create(
-      data: { prompt: string; permissionMode?: PermissionMode; stream?: boolean },
+      data: {
+        prompt: string;
+        permissionMode?: import('@agor/core/types').PermissionMode;
+        stream?: boolean;
+      },
       params: RouteParams
     ) {
       console.log(`📨 [Daemon] Prompt request for session ${params.route?.id?.substring(0, 8)}`);
@@ -823,14 +829,14 @@ async function main() {
                 id as SessionID,
                 data.prompt,
                 task.task_id,
-                data.permissionMode,
+                data.permissionMode as ClaudePermissionMode | undefined,
                 streamingCallbacks
               )
             : claudeTool.executePrompt(
                 id as SessionID,
                 data.prompt,
                 task.task_id,
-                data.permissionMode
+                data.permissionMode as ClaudePermissionMode | undefined
               );
         }
 

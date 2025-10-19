@@ -1,5 +1,7 @@
 // Schema and types
 
+// bcryptjs re-export (for password hashing in daemon)
+export { compare, hash } from 'bcryptjs';
 // Drizzle ORM re-exports (so daemon doesn't import drizzle-orm directly)
 // Commonly used operators and utilities
 export { and, desc, eq, inArray, like, or, sql } from 'drizzle-orm';

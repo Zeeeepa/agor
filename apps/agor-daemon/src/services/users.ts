@@ -6,10 +6,8 @@
  */
 
 import { generateId } from '@agor/core';
-import type { Database } from '@agor/core/db';
-import { eq, users } from '@agor/core/db';
+import { compare, type Database, eq, hash, users } from '@agor/core/db';
 import type { Paginated, Params, User, UserID } from '@agor/core/types';
-import { compare, hash } from 'bcryptjs';
 
 /**
  * Create user input
