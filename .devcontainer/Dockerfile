@@ -12,5 +12,5 @@ RUN npm install -g pnpm@9.15.1 @anthropic-ai/claude-code @google/gemini-cli @ope
 # Set working directory
 WORKDIR /workspace
 
-# Note: USER node is set automatically by devcontainer after features are installed
-# Do NOT set USER here - Docker-in-Docker feature needs root access
+# Run as root in sandbox (simpler for Codespaces dev environment)
+# Docker-in-Docker works better with root, no permission issues
