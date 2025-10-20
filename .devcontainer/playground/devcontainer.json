@@ -18,7 +18,6 @@
       "onAutoForward": "openBrowserOnce"
     }
   },
-  "postCreateCommand": "pnpm install && pnpm -r build",
   "postStartCommand": "bash .devcontainer/playground/start-services.sh",
   "customizations": {
     "vscode": {
