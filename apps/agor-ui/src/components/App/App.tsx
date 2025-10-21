@@ -389,12 +389,7 @@ export const App: React.FC<AppProps> = ({
           setSettingsOpen(true);
         }}
       />
-      <TerminalModal
-        open={terminalOpen}
-        onClose={() => setTerminalOpen(false)}
-        // biome-ignore lint/suspicious/noExplicitAny: AgorClient vs Application type incompatibility
-        client={client as any}
-      />
+      <TerminalModal open={terminalOpen} onClose={() => setTerminalOpen(false)} client={client} />
     </Layout>
   );
 };
