@@ -69,7 +69,7 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
   // Configure git with progress tracking
   const git = simpleGit({
     progress: options.onProgress
-      ? ({ method, stage, progress }) => {
+      ? ({ method, stage, progress }: { method: string; stage: string; progress: number }) => {
           options.onProgress?.({
             method,
             stage,
@@ -140,7 +140,7 @@ export async function isClean(repoPath: string): Promise<boolean> {
 export async function getRemoteUrl(repoPath: string, remote: string = 'origin'): Promise<string> {
   const git = simpleGit(repoPath);
   const remotes = await git.getRemotes(true);
-  const remoteObj = remotes.find((r) => r.name === remote);
+  const remoteObj = remotes.find((r: { name: string }) => r.name === remote);
   return remoteObj?.refs.fetch || '';
 }
 
@@ -270,6 +270,6 @@ export async function getRemoteBranches(
   const git = simpleGit(repoPath);
   const branches = await git.branch(['-r']);
   return branches.all
-    .filter((b) => b.startsWith(`${remote}/`))
-    .map((b) => b.replace(`${remote}/`, ''));
+    .filter((b: string) => b.startsWith(`${remote}/`))
+    .map((b: string) => b.replace(`${remote}/`, ''));
 }

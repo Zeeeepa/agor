@@ -6,7 +6,7 @@
 
 import { createClient, isDaemonRunning } from '@agor/core/api';
 import { getDaemonUrl } from '@agor/core/config';
-import type { Repo } from '@agor/core/types';
+import type { Repo, Worktree } from '@agor/core/types';
 import { Args, Command, Flags } from '@oclif/core';
 import chalk from 'chalk';
 
@@ -92,16 +92,19 @@ export default class WorktreeAdd extends Command {
 
       const repo = reposList[0] as Repo;
 
-      if (!repo.managed_by_agor) {
-        this.error(
-          `Repository '${args.repoSlug}' is not managed by Agor. Only Agor-managed repos support worktrees.`
-        );
-      }
-
-      // Check if worktree already exists
-      const existing = repo.worktrees.find(w => w.name === args.name);
-      if (existing) {
-        this.error(`Worktree '${args.name}' already exists at ${existing.path}`);
+      // Check if worktree already exists (query worktrees table)
+      const worktreesService = client.service('worktrees');
+      const existingWorktrees = await worktreesService.find({
+        query: {
+          repo_id: repo.repo_id,
+          name: args.name,
+        },
+      });
+      const worktreesList = (
+        Array.isArray(existingWorktrees) ? existingWorktrees : existingWorktrees.data
+      ) as Worktree[];
+      if (worktreesList.length > 0) {
+        this.error(`Worktree '${args.name}' already exists at ${worktreesList[0].path}`);
       }
 
       this.log('');
@@ -145,24 +148,20 @@ export default class WorktreeAdd extends Command {
       }
 
       // Call daemon API to create worktree
-      const updatedRepo = await client.service('repos').createWorktree(repo.repo_id, {
+      const newWorktree = (await client.service('repos').createWorktree(repo.repo_id, {
         name: args.name,
         ref,
         createBranch,
         pullLatest,
         sourceBranch,
-      });
+      })) as unknown as Worktree;
 
       this.log(`${chalk.green('✓')} Worktree created and registered`);
-
-      const worktree = updatedRepo.worktrees.find(w => w.name === args.name);
-      if (worktree) {
-        this.log(chalk.dim(`  Path: ${worktree.path}`));
-      }
+      this.log(chalk.dim(`  Path: ${newWorktree.path}`));
 
       this.log('');
       this.log(chalk.bold('Next steps:'));
-      this.log(`  ${chalk.dim('cd')} ${worktree?.path}`);
+      this.log(`  ${chalk.dim('cd')} ${newWorktree.path}`);
       this.log(
         `  ${chalk.dim('or start session:')} ${chalk.cyan(`agor session start --repo ${args.repoSlug} --worktree ${args.name}`)}`
       );

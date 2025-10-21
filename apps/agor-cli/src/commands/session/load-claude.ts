@@ -5,6 +5,7 @@
  * a corresponding Agor session with tasks.
  */
 
+import path from 'node:path';
 import { createClient, isDaemonRunning } from '@agor/core/api';
 import {
   extractTasksFromMessages,
@@ -14,7 +15,16 @@ import {
 } from '@agor/core/claude';
 import { getDaemonUrl } from '@agor/core/config';
 import { generateId } from '@agor/core/db';
-import type { MessageID, Session, SessionID, TaskID } from '@agor/core/types';
+import type {
+  MessageID,
+  Repo,
+  Session,
+  SessionID,
+  TaskID,
+  UUID,
+  Worktree,
+  WorktreeID,
+} from '@agor/core/types';
 import { Args, Command, Flags } from '@oclif/core';
 import chalk from 'chalk';
 
@@ -85,6 +95,58 @@ export default class SessionLoadClaude extends Command {
           : JSON.stringify(firstUserMessage.message.content).substring(0, 200)
         : 'Imported Claude Code session';
 
+      // Create or find repo for the project directory
+      this.log(`${chalk.blue('●')} Setting up worktree for imported session...`);
+      const reposService = client.service('repos');
+      const absoluteProjectDir = path.resolve(projectDir);
+      const projectName = path.basename(absoluteProjectDir);
+
+      // Try to find existing repo by path
+      let repo: { repo_id: UUID; slug: string } | null = null;
+      try {
+        const allRepos = await reposService.find({ query: { $limit: 1000 } });
+        const reposList = Array.isArray(allRepos) ? allRepos : allRepos.data;
+        repo = reposList.find((r: Repo) => r.local_path === absoluteProjectDir) || null;
+      } catch {
+        // Ignore errors
+      }
+
+      // Create repo if it doesn't exist
+      if (!repo) {
+        const newRepo = (await reposService.create({
+          repo_id: generateId() as UUID,
+          slug: `imported-${projectName}`,
+          name: projectName,
+          remote_url: '', // No remote for imported sessions
+          local_path: absoluteProjectDir,
+          created_at: new Date().toISOString(),
+          last_updated: new Date().toISOString(),
+        })) as Repo;
+        repo = { repo_id: newRepo.repo_id, slug: newRepo.slug };
+        this.log(`${chalk.green('✓')} Created repo: ${chalk.cyan(repo.slug)}`);
+      } else {
+        this.log(`${chalk.green('✓')} Found existing repo: ${chalk.cyan(repo.slug)}`);
+      }
+
+      // Create worktree for this imported session
+      const worktreesService = client.service('worktrees');
+      const worktreeName = `imported-${sessionId.substring(0, 8)}`;
+      const worktree = (await worktreesService.create({
+        worktree_id: generateId() as WorktreeID,
+        repo_id: repo.repo_id,
+        name: worktreeName,
+        ref: 'unknown', // Claude sessions don't track git state
+        worktree_unique_id: 0, // Will be auto-assigned by service hook
+        path: absoluteProjectDir,
+        new_branch: false,
+        sessions: [],
+        last_used: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        created_by: 'cli-import',
+      })) as Worktree;
+      this.log(`${chalk.green('✓')} Created worktree: ${chalk.cyan(worktreeName)}`);
+
       // Create Agor session
       const agorSession: Partial<Session> & { session_id: SessionID; created_by: string } = {
         session_id: generateId() as SessionID,
@@ -94,10 +156,7 @@ export default class SessionLoadClaude extends Command {
         created_at: new Date().toISOString(),
         last_updated: new Date().toISOString(),
         created_by: 'cli-import',
-        repo: {
-          cwd: claudeSession.cwd || projectDir,
-          managed_worktree: false,
-        },
+        worktree_id: worktree.worktree_id,
         git_state: {
           ref: 'unknown',
           base_sha: '',

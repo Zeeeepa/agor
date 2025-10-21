@@ -6,7 +6,7 @@
 
 import { createClient, isDaemonRunning } from '@agor/core/api';
 import { getDaemonUrl } from '@agor/core/config';
-import type { Repo } from '@agor/core/types';
+import type { Repo, Worktree } from '@agor/core/types';
 import { Args, Command } from '@oclif/core';
 import chalk from 'chalk';
 import Table from 'cli-table3';
@@ -102,13 +102,12 @@ export default class WorktreeList extends Command {
         return;
       }
 
-      // Count total worktrees
-      const totalWorktrees = repos.reduce(
-        (sum: number, repo: Repo) => sum + repo.worktrees.length,
-        0
-      );
+      // Query worktrees table for all worktrees
+      const worktreesService = client.service('worktrees');
+      const worktreesResult = await worktreesService.find({ query: { $limit: 1000 } });
+      const allWorktrees = Array.isArray(worktreesResult) ? worktreesResult : worktreesResult.data;
 
-      if (totalWorktrees === 0) {
+      if (allWorktrees.length === 0) {
         this.log(chalk.dim('No worktrees found.'));
         this.log('');
         this.log(`Create one with: ${chalk.cyan('agor repo worktree add <repo-slug> <name>')}`);
@@ -120,9 +119,19 @@ export default class WorktreeList extends Command {
 
       this.log('');
 
+      // Group worktrees by repo_id
+      const worktreesByRepo = new Map<string, Worktree[]>();
+      for (const wt of allWorktrees as Worktree[]) {
+        if (!worktreesByRepo.has(wt.repo_id)) {
+          worktreesByRepo.set(wt.repo_id, []);
+        }
+        worktreesByRepo.get(wt.repo_id)?.push(wt);
+      }
+
       // Display worktrees grouped by repo
       for (const repo of repos) {
-        if (repo.worktrees.length === 0) continue;
+        const repoWorktrees = worktreesByRepo.get(repo.repo_id) || [];
+        if (repoWorktrees.length === 0) continue;
 
         this.log(chalk.bold(`Repository: ${chalk.cyan(repo.slug)}`));
 
@@ -140,7 +149,7 @@ export default class WorktreeList extends Command {
           colWidths: [20, 25, 10, 15],
         });
 
-        for (const worktree of repo.worktrees) {
+        for (const worktree of repoWorktrees) {
           table.push([
             worktree.name,
             worktree.ref,
@@ -153,7 +162,9 @@ export default class WorktreeList extends Command {
         this.log('');
       }
 
-      this.log(chalk.dim(`Showing ${totalWorktrees} worktree(s) across ${repos.length} repo(s)`));
+      this.log(
+        chalk.dim(`Showing ${allWorktrees.length} worktree(s) across ${repos.length} repo(s)`)
+      );
       this.log('');
 
       // Close socket

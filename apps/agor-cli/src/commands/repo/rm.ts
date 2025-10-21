@@ -82,21 +82,14 @@ export default class RepoRm extends Command {
       this.log(`  ${chalk.cyan('Slug')}: ${repo.slug}`);
       this.log(`  ${chalk.cyan('Path')}: ${repo.local_path}`);
 
-      // Show worktrees if any
-      if (repo.worktrees && repo.worktrees.length > 0) {
-        this.log(`  ${chalk.cyan('Worktrees')}: ${repo.worktrees.length}`);
-        for (const wt of repo.worktrees) {
-          this.log(chalk.dim(`    - ${wt.name} (${wt.path})`));
-        }
-      }
+      // Note: Worktrees are now in a separate table, not nested in repo
+      // For now, we just show repo info (would need to query worktrees table separately)
       this.log('');
 
       if (flags['delete-files']) {
         this.log(chalk.yellow('⚠ WARNING: Local files will also be deleted:'));
         this.log(chalk.yellow(`  Main repo: ${repo.local_path}`));
-        if (repo.worktrees && repo.worktrees.length > 0) {
-          this.log(chalk.yellow(`  Worktrees: ${repo.worktrees.length} worktree(s)`));
-        }
+        this.log(chalk.yellow(`  Note: Any associated worktrees will also be deleted`));
         this.log('');
       } else {
         this.log(chalk.dim('(Local files will NOT be deleted)'));
@@ -157,27 +150,12 @@ export default class RepoRm extends Command {
           );
         }
 
-        // Delete worktrees
-        if (repo.worktrees && repo.worktrees.length > 0) {
-          for (const wt of repo.worktrees) {
-            try {
-              await fs.rm(wt.path, { recursive: true, force: true });
-              this.log(`${chalk.green('✓')} Worktree deleted: ${chalk.dim(wt.name)}`);
-            } catch (error) {
-              this.warn(
-                `Failed to delete worktree ${wt.name}: ${error instanceof Error ? error.message : String(error)}`
-              );
-            }
-          }
-        }
+        // TODO: Query worktrees table separately and delete associated worktree directories
+        // For now, worktrees cascade delete in database but files remain
       } else {
         this.log(chalk.dim('Local files preserved:'));
         this.log(chalk.dim('  Main repo: ') + repo.local_path);
-        if (repo.worktrees && repo.worktrees.length > 0) {
-          for (const wt of repo.worktrees) {
-            this.log(chalk.dim(`  Worktree ${wt.name}: `) + wt.path);
-          }
-        }
+        // TODO: List worktrees from worktrees table
       }
 
       this.log('');

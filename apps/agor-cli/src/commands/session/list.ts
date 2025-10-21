@@ -167,9 +167,9 @@ export default class SessionList extends BaseCommand {
         // Note: session.tasks are TaskID arrays, not full Task objects in list view
         // Task completion stats would require joining with tasks table
         const completedTasks = 0;
-        const worktree = session.repo?.worktree_name
-          ? `${session.repo.repo_slug}:${session.repo.worktree_name}`
-          : session.repo?.repo_slug || '-';
+        // Note: Session now uses worktree_id, not nested repo object
+        // For now, show worktree_id if available, otherwise '-'
+        const worktree = session.worktree_id ? session.worktree_id.substring(0, 8) : '-';
         const gitRef = session.git_state?.ref || '-';
         const modified = this.formatRelativeTime(session.last_updated || session.created_at);
 
