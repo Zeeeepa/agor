@@ -26,6 +26,9 @@ export default defineConfig({
   },
 
   server: {
+    // Bind to 0.0.0.0 for Codespaces/Docker accessibility
+    host: '0.0.0.0',
+    port: 5173,
     // Watch for changes in workspace packages
     watch: {
       // Watch the @agor/core dist directory for changes

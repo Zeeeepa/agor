@@ -61,6 +61,15 @@ done
 # Start UI in background (using built dist/)
 cd /workspaces/agor/apps/agor-ui
 echo "🎨 Starting UI on :5173..."
+
+# Detect Codespaces and set daemon URL accordingly
+if [ -n "$CODESPACE_NAME" ]; then
+  # In Codespaces, use the forwarded daemon URL
+  DAEMON_URL="https://${CODESPACE_NAME}-3030.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+  echo "   Codespaces detected - daemon URL: $DAEMON_URL"
+  export VITE_DAEMON_URL="$DAEMON_URL"
+fi
+
 pnpm preview > /tmp/agor-ui.log 2>&1 &
 UI_PID=$!
 
