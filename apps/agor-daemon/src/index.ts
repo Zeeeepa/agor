@@ -28,6 +28,7 @@ import {
   socketio,
 } from '@agor/core/feathers';
 import { type PermissionDecision, PermissionService } from '@agor/core/permissions';
+import { registerHandlebarsHelpers } from '@agor/core/templates/handlebars-helpers';
 import { ClaudeTool, CodexTool, GeminiTool } from '@agor/core/tools';
 import type {
   Board,
@@ -99,6 +100,10 @@ const DB_PATH = process.env.AGOR_DB_PATH || 'file:~/.agor/agor.db';
 
 // Main async function
 async function main() {
+  // Initialize Handlebars helpers for template rendering
+  registerHandlebarsHelpers();
+  console.log('✅ Handlebars helpers registered');
+
   // Load config to get ports and API keys
   const config = await loadConfig();
 
