@@ -57,7 +57,7 @@ fi
 # Start daemon in background using tsx (simpler, avoids ESM module resolution issues)
 cd /workspaces/agor/apps/agor-daemon
 echo "🔧 Starting daemon on :3030 (tsx)..."
-tsx src/index.ts > /tmp/agor-daemon.log 2>&1 &
+pnpm exec tsx src/index.ts > /tmp/agor-daemon.log 2>&1 &
 DAEMON_PID=$!
 
 # Wait for daemon to be ready
