@@ -40,9 +40,6 @@ jobs:
       - name: Build core package
         run: pnpm --filter @agor/core build
 
-      - name: Generate CLI docs
-        run: pnpm --filter @agor/docs generate
-
       - name: Build docs
         run: pnpm --filter @agor/docs build
         env:

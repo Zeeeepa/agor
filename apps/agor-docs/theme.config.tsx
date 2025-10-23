@@ -55,7 +55,7 @@ const config: DocsThemeConfig = {
   },
 
   footer: {
-    text: `MIT ${new Date().getFullYear()} © Agor`,
+    component: <span>BSL 1.1 © {new Date().getFullYear()} Maxime Beauchemin</span>,
   },
 
   toc: {
