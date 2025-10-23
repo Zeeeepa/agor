@@ -85,12 +85,18 @@ const config: DocsThemeConfig = {
     );
   },
 
-  primaryHue: 174, // Teal hue for #2e9a92
-  primarySaturation: 55,
+  color: {
+    hue: 174, // Teal hue for #2e9a92
+    saturation: 55,
+  },
 
   darkMode: true,
-  nextThemes: {
-    defaultTheme: 'dark',
+  themeSwitch: {
+    useOptions: () => ({
+      dark: 'Dark',
+      light: 'Light',
+      system: 'System',
+    }),
   },
 };
 
