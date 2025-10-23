@@ -70,6 +70,7 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
   const [form] = Form.useForm();
   const [useSameBranchName, setUseSameBranchName] = useState(true);
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
+  const [isFormValid, setIsFormValid] = useState(false);
 
   // Helper to get repo name from repo_id
   const getRepoName = (repoId: string): string => {
@@ -182,6 +183,18 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
     form.resetFields();
     setUseSameBranchName(true);
     setSelectedRepoId(null);
+    setIsFormValid(false);
+  };
+
+  // Validate form fields to enable/disable Create button
+  const validateForm = () => {
+    const values = form.getFieldsValue();
+    const hasRepo = !!values.repoId;
+    const hasSourceBranch = !!values.sourceBranch;
+    const hasName = !!values.name && /^[a-z0-9-]+$/.test(values.name);
+    const hasBranchName = useSameBranchName || !!values.branchName;
+
+    setIsFormValid(hasRepo && hasSourceBranch && hasName && hasBranchName);
   };
 
   const columns = [
@@ -403,8 +416,11 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
         onOk={handleCreate}
         onCancel={handleCancel}
         okText="Create"
+        okButtonProps={{
+          disabled: !isFormValid,
+        }}
       >
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" onFieldsChange={validateForm}>
           <Form.Item
             name="repoId"
             label="Repository"
@@ -452,7 +468,11 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
           <Form.Item>
             <Checkbox
               checked={useSameBranchName}
-              onChange={e => setUseSameBranchName(e.target.checked)}
+              onChange={e => {
+                setUseSameBranchName(e.target.checked);
+                // Re-validate form after checkbox change
+                setTimeout(validateForm, 0);
+              }}
             >
               Use worktree name as branch name
             </Checkbox>
