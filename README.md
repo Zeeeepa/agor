@@ -54,18 +54,6 @@ docker compose up
 - Sessions live on a **dynamic board** — cluster by project, phase, or purpose.
 - Visualize your full session tree: forks, spawns, subtasks, and outcomes.
 
-### 🧠 **Context-Aware Development**
-
-- Manage deliberate context via `context/` folder of markdown files.
-- Dynamically load modular context blocks per session.
-- Keep every agent’s worldview focused and version-controlled.
-
-### 🔀 **Native Session Forking & Subtask Forcing**
-
-- **Fork** any session to explore alternative approaches, preserving full ancestry.
-- **Spawn** a subtask: Agor automatically creates a new session with a fresh context window.
-- Subtasks are introspectable, reusable, and linked in the session genealogy.
-
 ### ⚙️ **Zone Triggers — Workflows Made Spatial**
 
 - Define **zones** on your board that trigger templated prompts when sessions are dropped.
@@ -103,11 +91,11 @@ See the [Architecture Guide](https://mistercrunch.github.io/agor/guide/architect
 
 ## Roadmap
 
-- Gemini Integration (in progress)
-- Session Forking UI with genealogy visualization
-- Automated Reports after task completion
-- Concept Management system
-- Federated Boards
+- **Gemini Integration** — Complete the agent trio (Claude, Codex, Gemini) with unified SDK support (in progress)
+- **Session Forking & Subtask Spawning** — Fork sessions to explore alternative approaches or spawn subtasks with fresh context windows, all with full genealogy tracking and interactive visualization
+- **Automated Reports** — AI-generated summaries after task completion, capturing outcomes, decisions made, and artifacts produced for future reference
+- **Context Management System** — Modular markdown-based context files that compose into session-specific knowledge, keeping every agent's worldview focused and version-controlled
+- **Federated Boards** — Share, remix, and learn from session patterns across teams and organizations
 
 ---
 
