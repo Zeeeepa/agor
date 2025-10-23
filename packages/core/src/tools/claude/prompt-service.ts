@@ -92,6 +92,9 @@ export class ClaudePromptService {
   /** Track stop requests for immediate loop breaking */
   private stopRequested = new Map<SessionID, boolean>();
 
+  /** Serialize permission checks per session to prevent duplicate prompts for concurrent tool calls */
+  private permissionLocks = new Map<SessionID, Promise<void>>();
+
   constructor(
     private messagesRepo: MessagesRepository,
     private sessionsRepo: SessionRepository,
@@ -122,12 +125,27 @@ export class ClaudePromptService {
         return {};
       }
 
+      // Track lock release function for finally block
+      let releaseLock: (() => void) | undefined;
+
       try {
-        // Check session-specific permission overrides first
-        // IMPORTANT: Always fetch fresh session data to catch recently saved permissions
+        // STEP 1: Wait for any pending permission check to finish (queue serialization)
+        // This prevents duplicate prompts for concurrent tool calls
+        const existingLock = this.permissionLocks.get(sessionId);
+        if (existingLock) {
+          console.log(
+            `⏳ Waiting for pending permission check to complete (session ${sessionId.substring(0, 8)})`
+          );
+          await existingLock;
+          console.log(`✅ Permission check complete, rechecking DB...`);
+        }
+
+        // STEP 2: Check session-specific permission overrides
+        // IMPORTANT: Re-fetch after waiting for lock - previous hook may have saved permission
         const session = await this.sessionsRepo.findById(sessionId);
 
         if (session?.permission_config?.allowedTools?.includes(input.tool_name)) {
+          console.log(`✅ Tool ${input.tool_name} allowed by session config (after queue wait)`);
           return {
             hookSpecificOutput: {
               hookEventName: 'PreToolUse',
@@ -136,6 +154,15 @@ export class ClaudePromptService {
             },
           };
         }
+
+        // STEP 3: No existing permission - create lock and show prompt
+        console.log(
+          `🔒 No permission found for ${input.tool_name}, creating lock and prompting user...`
+        );
+        const newLock = new Promise<void>(resolve => {
+          releaseLock = resolve;
+        });
+        this.permissionLocks.set(sessionId, newLock);
 
         // Generate request ID
         const requestId = generateId();
@@ -311,6 +338,14 @@ export class ClaudePromptService {
             permissionDecisionReason: `Permission hook failed: ${error instanceof Error ? error.message : String(error)}`,
           },
         };
+      } finally {
+        // STEP 4: Always release the lock when done (success or error)
+        // This allows queued hooks to proceed
+        if (releaseLock) {
+          releaseLock();
+          this.permissionLocks.delete(sessionId);
+          console.log(`🔓 Released permission lock for session ${sessionId.substring(0, 8)}`);
+        }
       }
     };
   }
