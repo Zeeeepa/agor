@@ -289,4 +289,12 @@ export interface RepoEnvironmentConfig {
      */
     url_template?: string;
   };
+
+  /**
+   * App URL template (Handlebars template)
+   * URL to access the running application
+   *
+   * Example: "http://localhost:{{add 5000 worktree.unique_id}}"
+   */
+  app_url_template?: string;
 }

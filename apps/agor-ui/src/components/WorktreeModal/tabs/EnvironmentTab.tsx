@@ -10,8 +10,10 @@ import { renderTemplate } from '@agor/core/templates/handlebars-helpers';
 import type { Repo, RepoEnvironmentConfig, Worktree } from '@agor/core/types';
 import {
   CheckCircleOutlined,
+  CheckOutlined,
   CloseCircleOutlined,
   CodeOutlined,
+  CopyOutlined,
   EditOutlined,
   LoadingOutlined,
   PlayCircleOutlined,
@@ -48,6 +50,99 @@ interface EnvironmentTabProps {
   onUpdateWorktree?: (worktreeId: string, updates: Partial<Worktree>) => void;
 }
 
+// Helper component for command previews
+const CommandPreview: React.FC<{
+  label: string;
+  preview: { success: boolean; result: string };
+}> = ({ label, preview }) => {
+  const { token } = theme.useToken();
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(preview.result);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 32 }}>
+      <Text type="secondary" style={{ minWidth: 80, textAlign: 'right', fontSize: 13 }}>
+        {label}:
+      </Text>
+      <Text
+        code
+        style={{
+          flex: 1,
+          padding: '2px 6px',
+          fontSize: 13,
+          color: preview.success ? token.colorText : token.colorError,
+          wordBreak: 'break-word',
+          overflowWrap: 'break-word',
+          cursor: 'pointer',
+          lineHeight: 1.4,
+        }}
+        onClick={handleCopy}
+        title="Click to copy"
+      >
+        {preview.result}
+      </Text>
+      <Button
+        type="text"
+        size="small"
+        icon={copied ? <CheckOutlined /> : <CopyOutlined />}
+        onClick={handleCopy}
+        style={{ flexShrink: 0 }}
+      />
+    </div>
+  );
+};
+
+// Helper component for template field display (read-only view)
+const TemplateField: React.FC<{ label: string; value: string }> = ({ label, value }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!value) return;
+    await navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 32 }}>
+      <Text type="secondary" style={{ minWidth: 120, textAlign: 'right', fontSize: 13 }}>
+        {label}:
+      </Text>
+      <Text
+        code
+        style={{
+          flex: 1,
+          padding: '2px 6px',
+          fontSize: 13,
+          wordBreak: 'break-word',
+          overflowWrap: 'break-word',
+          cursor: value ? 'pointer' : 'default',
+          opacity: value ? 1 : 0.5,
+          lineHeight: 1.4,
+        }}
+        onClick={handleCopy}
+        title={value ? 'Click to copy' : undefined}
+      >
+        {value || 'Not configured'}
+      </Text>
+      {value && (
+        <Button
+          type="text"
+          size="small"
+          icon={copied ? <CheckOutlined /> : <CopyOutlined />}
+          onClick={handleCopy}
+          style={{ flexShrink: 0 }}
+        />
+      )}
+    </div>
+  );
+};
+
 export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
   worktree,
   repo,
@@ -65,6 +160,7 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
   const [healthCheckUrl, setHealthCheckUrl] = useState(
     repo.environment_config?.health_check?.url_template || ''
   );
+  const [appUrl, setAppUrl] = useState(repo.environment_config?.app_url_template || '');
 
   // Custom context state (editable)
   const [isEditingContext, setIsEditingContext] = useState(false);
@@ -153,13 +249,14 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
 
   // Check if template has unsaved changes
   const hasTemplateChanges = useMemo(() => {
-    if (!repo.environment_config) return upCommand || downCommand || healthCheckUrl;
+    if (!repo.environment_config) return upCommand || downCommand || healthCheckUrl || appUrl;
     return (
       upCommand !== repo.environment_config.up_command ||
       downCommand !== repo.environment_config.down_command ||
-      healthCheckUrl !== (repo.environment_config.health_check?.url_template || '')
+      healthCheckUrl !== (repo.environment_config.health_check?.url_template || '') ||
+      appUrl !== (repo.environment_config.app_url_template || '')
     );
-  }, [upCommand, downCommand, healthCheckUrl, repo.environment_config]);
+  }, [upCommand, downCommand, healthCheckUrl, appUrl, repo.environment_config]);
 
   // Build template context for preview
   const templateContext = useMemo(() => {
@@ -208,6 +305,7 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
             url_template: healthCheckUrl,
           }
         : undefined,
+      app_url_template: appUrl || undefined,
     };
 
     onUpdateRepo(repo.repo_id, {
@@ -236,6 +334,7 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
     setUpCommand(repo.environment_config?.up_command || '');
     setDownCommand(repo.environment_config?.down_command || '');
     setHealthCheckUrl(repo.environment_config?.health_check?.url_template || '');
+    setAppUrl(repo.environment_config?.app_url_template || '');
     setIsEditingTemplate(false);
   };
 
@@ -253,21 +352,22 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
   const upPreview = renderPreview(upCommand);
   const downPreview = renderPreview(downCommand);
   const healthPreview = healthCheckUrl ? renderPreview(healthCheckUrl) : null;
+  const appUrlPreview = appUrl ? renderPreview(appUrl) : null;
 
-  // Helper to get status badge
+  // Helper to get status badge (text-only, no colored dot)
   const getStatusBadge = () => {
     switch (envStatus) {
       case 'running':
-        return <Badge status="processing" text="Running" />;
+        return <Text>Running</Text>;
       case 'starting':
-        return <Badge status="processing" text="Starting..." />;
+        return <Text>Starting...</Text>;
       case 'stopping':
-        return <Badge status="warning" text="Stopping..." />;
+        return <Text type="warning">Stopping...</Text>;
       case 'error':
-        return <Badge status="error" text="Error" />;
+        return <Text type="danger">Error</Text>;
       case 'stopped':
       default:
-        return <Badge status="default" text="Stopped" />;
+        return <Text type="secondary">Stopped</Text>;
     }
   };
 
@@ -293,6 +393,7 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
     const diffMs = now.getTime() - date.getTime();
     const diffSec = Math.floor(diffMs / 1000);
 
+    if (diffSec < 5) return null; // Don't show "just now" - not useful
     if (diffSec < 60) return `${diffSec}s ago`;
     if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
     return date.toLocaleTimeString();
@@ -318,6 +419,79 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
   return (
     <div style={{ width: '100%', maxHeight: '70vh', overflowY: 'auto' }}>
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        {/* ========== ENVIRONMENT CONTROLS (Top) ========== */}
+        {hasEnvironmentConfig && (
+          <Card size="small">
+            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              {/* Status and Control Buttons - Single Row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {/* Spinner (only when running) */}
+                {envStatus === 'running' && <Spin size="small" />}
+
+                {/* Health Status Icon */}
+                {lastHealthCheck && getHealthBadge()}
+
+                {/* Status Badge */}
+                {getStatusBadge()}
+
+                {/* Spacer */}
+                <div style={{ flex: 1 }} />
+
+                {/* Control Buttons */}
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={isStarting ? <LoadingOutlined /> : <PlayCircleOutlined />}
+                  onClick={handleStart}
+                  disabled={
+                    envStatus === 'running' ||
+                    envStatus === 'starting' ||
+                    isStarting ||
+                    isStopping ||
+                    isRestarting
+                  }
+                  loading={isStarting}
+                >
+                  Start
+                </Button>
+
+                <Button
+                  size="small"
+                  icon={isStopping ? <LoadingOutlined /> : <PoweroffOutlined />}
+                  onClick={handleStop}
+                  loading={isStopping}
+                  danger
+                >
+                  Stop
+                </Button>
+
+                <Button
+                  size="small"
+                  icon={isRestarting ? <LoadingOutlined /> : <ReloadOutlined />}
+                  onClick={handleRestart}
+                  disabled={isStarting || isStopping || isRestarting}
+                  loading={isRestarting}
+                >
+                  Restart
+                </Button>
+              </div>
+
+              {/* Error State */}
+              {envStatus === 'error' && lastHealthCheck?.message && (
+                <Alert
+                  message="Environment Error"
+                  description={lastHealthCheck.message}
+                  type="error"
+                  showIcon
+                  style={{ fontSize: 11 }}
+                />
+              )}
+            </Space>
+          </Card>
+        )}
+
+        <Divider style={{ margin: '8px 0' }} />
+
         {/* ========== REPOSITORY TEMPLATE (Top Level) ========== */}
         <Card
           title={
@@ -344,13 +518,13 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
           }
         >
           <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-            {/* Up Command */}
-            <div>
-              <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-                Up Command (Start Environment)
-              </Text>
-              {isEditingTemplate ? (
-                <>
+            {isEditingTemplate ? (
+              <>
+                {/* Up Command */}
+                <div>
+                  <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+                    Up Command (Start Environment)
+                  </Text>
                   <TextArea
                     value={upCommand}
                     onChange={e => setUpCommand(e.target.value)}
@@ -362,24 +536,13 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
                     ⚠️ Command should start services in the background and return (e.g., docker
                     compose up -d, systemctl start, etc.)
                   </Text>
-                </>
-              ) : (
-                <Text
-                  code
-                  style={{ fontSize: 11, wordBreak: 'break-all', display: 'block', padding: 8 }}
-                >
-                  {upCommand || <Text type="secondary">Not configured</Text>}
-                </Text>
-              )}
-            </div>
+                </div>
 
-            {/* Down Command */}
-            <div>
-              <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-                Down Command (Stop Environment)
-              </Text>
-              {isEditingTemplate ? (
-                <>
+                {/* Down Command */}
+                <div>
+                  <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+                    Down Command (Stop Environment)
+                  </Text>
                   <TextArea
                     value={downCommand}
                     onChange={e => setDownCommand(e.target.value)}
@@ -391,38 +554,46 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
                     Command should stop services and return (e.g., docker compose down, systemctl
                     stop, etc.)
                   </Text>
-                </>
-              ) : (
-                <Text
-                  code
-                  style={{ fontSize: 11, wordBreak: 'break-all', display: 'block', padding: 8 }}
-                >
-                  {downCommand || <Text type="secondary">Not configured</Text>}
-                </Text>
-              )}
-            </div>
+                </div>
 
-            {/* Health Check URL */}
-            <div>
-              <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-                Health Check URL (Optional)
-              </Text>
-              {isEditingTemplate ? (
-                <Input
-                  value={healthCheckUrl}
-                  onChange={e => setHealthCheckUrl(e.target.value)}
-                  placeholder="http://localhost:{{add 9000 worktree.unique_id}}/health"
-                  style={{ fontFamily: 'monospace', fontSize: 11 }}
-                />
-              ) : (
-                <Text
-                  code
-                  style={{ fontSize: 11, wordBreak: 'break-all', display: 'block', padding: 8 }}
-                >
-                  {healthCheckUrl || <Text type="secondary">Not configured</Text>}
-                </Text>
-              )}
-            </div>
+                {/* Health Check URL */}
+                <div>
+                  <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+                    Health Check URL (Optional)
+                  </Text>
+                  <Input
+                    value={healthCheckUrl}
+                    onChange={e => setHealthCheckUrl(e.target.value)}
+                    placeholder="http://localhost:{{add 9000 worktree.unique_id}}/health"
+                    style={{ fontFamily: 'monospace', fontSize: 11 }}
+                  />
+                </div>
+
+                {/* App URL */}
+                <div>
+                  <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+                    App URL
+                  </Text>
+                  <Input
+                    value={appUrl}
+                    onChange={e => setAppUrl(e.target.value)}
+                    placeholder="http://localhost:{{add 5000 worktree.unique_id}}"
+                    style={{ fontFamily: 'monospace', fontSize: 11 }}
+                  />
+                  <Text type="secondary" style={{ fontSize: 10, display: 'block', marginTop: 4 }}>
+                    URL to access the running app. This will appear as a clickable link when the
+                    environment is running.
+                  </Text>
+                </div>
+              </>
+            ) : (
+              <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                <TemplateField label="Up Command" value={upCommand} />
+                <TemplateField label="Down Command" value={downCommand} />
+                <TemplateField label="Health Check URL" value={healthCheckUrl} />
+                <TemplateField label="App URL" value={appUrl} />
+              </Space>
+            )}
 
             {/* Available Variables Info */}
             {isEditingTemplate && (
@@ -583,200 +754,14 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
                 <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>
                   Resolved Commands (Live Preview)
                 </Text>
-                <Space direction="vertical" size="small" style={{ width: '100%' }}>
-                  {/* Up Command Preview */}
-                  <div>
-                    <Text type="secondary" style={{ fontSize: 11 }}>
-                      Up:
-                    </Text>
-                    <Text
-                      code
-                      style={{
-                        fontSize: 11,
-                        display: 'block',
-                        padding: 8,
-                        background: upPreview.success ? token.colorSuccessBg : token.colorErrorBg,
-                        border: `1px solid ${upPreview.success ? token.colorSuccessBorder : token.colorErrorBorder}`,
-                        color: upPreview.success ? token.colorSuccessText : token.colorErrorText,
-                        marginTop: 4,
-                        wordBreak: 'break-word',
-                        overflowWrap: 'break-word',
-                      }}
-                    >
-                      {upPreview.result}
-                    </Text>
-                  </div>
-
-                  {/* Down Command Preview */}
-                  <div>
-                    <Text type="secondary" style={{ fontSize: 11 }}>
-                      Down:
-                    </Text>
-                    <Text
-                      code
-                      style={{
-                        fontSize: 11,
-                        display: 'block',
-                        padding: 8,
-                        background: downPreview.success ? token.colorSuccessBg : token.colorErrorBg,
-                        border: `1px solid ${downPreview.success ? token.colorSuccessBorder : token.colorErrorBorder}`,
-                        color: downPreview.success ? token.colorSuccessText : token.colorErrorText,
-                        marginTop: 4,
-                        wordBreak: 'break-word',
-                        overflowWrap: 'break-word',
-                      }}
-                    >
-                      {downPreview.result}
-                    </Text>
-                  </div>
-
-                  {/* Health Check Preview */}
-                  {healthPreview && (
-                    <div>
-                      <Text type="secondary" style={{ fontSize: 11 }}>
-                        Health Check:
-                      </Text>
-                      <Text
-                        code
-                        style={{
-                          fontSize: 11,
-                          display: 'block',
-                          padding: 8,
-                          background: healthPreview.success
-                            ? token.colorSuccessBg
-                            : token.colorErrorBg,
-                          border: `1px solid ${healthPreview.success ? token.colorSuccessBorder : token.colorErrorBorder}`,
-                          color: healthPreview.success
-                            ? token.colorSuccessText
-                            : token.colorErrorText,
-                          marginTop: 4,
-                          wordBreak: 'break-word',
-                          overflowWrap: 'break-word',
-                        }}
-                      >
-                        {healthPreview.result}
-                      </Text>
-                    </div>
-                  )}
+                <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                  <CommandPreview label="Up" preview={upPreview} />
+                  <CommandPreview label="Down" preview={downPreview} />
+                  {healthPreview && <CommandPreview label="Health Check" preview={healthPreview} />}
+                  {appUrlPreview && <CommandPreview label="App URL" preview={appUrlPreview} />}
                 </Space>
               </div>
             )}
-
-            {/* Environment Status and Controls */}
-            <div>
-              <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>
-                Environment Status
-              </Text>
-
-              {!hasEnvironmentConfig ? (
-                <Alert
-                  message="No Environment Configuration"
-                  description="Configure environment commands in the Repository Template section above to enable start/stop controls."
-                  type="warning"
-                  showIcon
-                  style={{ fontSize: 11 }}
-                />
-              ) : (
-                <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                  {/* Status and Control Buttons */}
-                  <Space size="middle" wrap>
-                    {/* Status Badge */}
-                    {getStatusBadge()}
-
-                    {/* Control Buttons */}
-                    <Button
-                      type="primary"
-                      size="small"
-                      icon={isStarting ? <LoadingOutlined /> : <PlayCircleOutlined />}
-                      onClick={handleStart}
-                      disabled={
-                        envStatus === 'running' ||
-                        envStatus === 'starting' ||
-                        isStarting ||
-                        isStopping ||
-                        isRestarting
-                      }
-                      loading={isStarting}
-                    >
-                      Start
-                    </Button>
-
-                    <Button
-                      size="small"
-                      icon={isStopping ? <LoadingOutlined /> : <PoweroffOutlined />}
-                      onClick={handleStop}
-                      loading={isStopping}
-                      danger
-                    >
-                      Stop
-                    </Button>
-
-                    <Button
-                      size="small"
-                      icon={isRestarting ? <LoadingOutlined /> : <ReloadOutlined />}
-                      onClick={handleRestart}
-                      disabled={isStarting || isStopping || isRestarting}
-                      loading={isRestarting}
-                    >
-                      Restart
-                    </Button>
-                  </Space>
-
-                  {/* Process Info */}
-                  {processInfo && envStatus === 'running' && (
-                    <Descriptions column={1} bordered size="small" style={{ fontSize: 11 }}>
-                      <Descriptions.Item label="Process ID">
-                        <Text code>{processInfo.pid}</Text>
-                      </Descriptions.Item>
-                      <Descriptions.Item label="Uptime">
-                        <Text>{getUptime() || 'Just started'}</Text>
-                      </Descriptions.Item>
-                    </Descriptions>
-                  )}
-
-                  {/* Health Check Status */}
-                  {lastHealthCheck && (
-                    <div
-                      style={{
-                        padding: 8,
-                        background: token.colorBgContainer,
-                        border: `1px solid ${token.colorBorder}`,
-                        borderRadius: token.borderRadius,
-                      }}
-                    >
-                      <Space size="small">
-                        {getHealthBadge()}
-                        {envStatus === 'running' && <Spin size="small" />}
-                        <Text style={{ fontSize: 11 }}>
-                          Health: <Text strong>{lastHealthCheck.status}</Text>
-                        </Text>
-                        {lastHealthCheck.message && (
-                          <Text type="secondary" style={{ fontSize: 11 }}>
-                            ({lastHealthCheck.message})
-                          </Text>
-                        )}
-                      </Space>
-                      <div style={{ marginTop: 4 }}>
-                        <Text type="secondary" style={{ fontSize: 10 }}>
-                          Last checked: {formatTimestamp(lastHealthCheck.timestamp)}
-                        </Text>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Error State */}
-                  {envStatus === 'error' && lastHealthCheck?.message && (
-                    <Alert
-                      message="Environment Error"
-                      description={lastHealthCheck.message}
-                      type="error"
-                      showIcon
-                      style={{ fontSize: 11 }}
-                    />
-                  )}
-                </Space>
-              )}
-            </div>
           </Space>
         </Card>
       </Space>

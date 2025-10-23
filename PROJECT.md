@@ -1,25 +1,6 @@
-## Implementation Status
-
-### ✅ Phase 2 Complete: Multi-User Foundation + Multiplayer
+## TODOs and Roadmap
 
 See [context/concepts/multiplayer.md](context/concepts/multiplayer.md) and [context/concepts/mcp-integration.md](context/concepts/mcp-integration.md) for full documentation.
-
-**Completed Features:**
-
-- ✅ **User Authentication** - Email/password + JWT, anonymous mode
-- ✅ **Real-time collaboration** - Multi-user boards with WebSocket sync
-- ✅ **Board zones** - Visual organization with Handlebars triggers (Prompt/Task/Subtask)
-- ✅ **Facepile** - Active users with emoji avatars in header
-- ✅ **Cursor swarm** - Real-time cursor broadcasting (100ms throttle)
-  - Remote cursors visible in canvas and minimap
-  - Smooth position transitions with timestamp-based ordering
-- ✅ **MCP server integration** - Phase 1-2 complete
-  - Database schema + repositories + services
-  - MCPServersTable UI with full CRUD
-  - MCPServerSelect for session-level selection
-  - CLI commands: `agor mcp add/list/show/remove`
-- ✅ **Claude Agent SDK** - Live session execution with streaming
-- ✅ **OpenAI Codex SDK** - Beta integration with permission modes
 
 ### Phase 3: Collaboration & Orchestration
 
@@ -36,14 +17,6 @@ See [context/concepts/multiplayer.md](context/concepts/multiplayer.md) and [cont
   - React Flow edges between parent/child/forked sessions
   - Different edge styles (solid spawn, dashed fork)
   - Click edge to see fork/spawn context
-
-**MCP Phase 3 (2-3 weeks):**
-
-- [ ] **SDK integration** - Pass MCP servers to agent
-  - Convert Agor configs to SDK format
-  - Enable agents to use configured MCP tools
-- [ ] **Import/export** - Auto-discover `.mcp.json` from Claude Code
-- [ ] **Testing & discovery** - Verify connectivity, auto-detect capabilities
 
 ### Phase 4: Distribution & Packaging (Q2-Q4 2025)
 
@@ -82,25 +55,12 @@ See [context/explorations/](context/explorations/) for detailed designs:
 
 # Critical Path
 
-**Agent Integration:**
-
-- ✅ Claude Agent SDK - live execution with streaming
-- ✅ Codex SDK - beta integration with permission modes
-- ⏳ **Improve Codex SDK integration** - test/refine permission handling, tool uses
-- [ ] **Get Gemini to work** - integrate Gemini SDK similar to Claude/Codex
-
-**Information Architecture:**
-
-- ✅ **Git state tracking** - attach branch + sha to tasks at creation time (marks -dirty)
 - ⏳ **Concepts & Reports** - integrate in UI/CLI as first-class primitives
   - Concept management (CRUD/CLI) - many-to-many per session, shows as readonly
   - Report management + production system
 
 **Tool Visualization:**
 
-- ✅ Task-centric conversation UI
-- ✅ Tool blocks with semantic grouping
-- ⏳ **Improve tool blocks** - better Storybook coverage for common tools
 - ⏳ **Todo tool visualization** - render task list with checkboxes
 - ⏳ **Write (diff) tool** - show file changes with syntax highlighting
 

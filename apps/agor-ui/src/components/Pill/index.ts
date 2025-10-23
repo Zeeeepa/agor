@@ -7,6 +7,7 @@ export {
   GitStatePill,
   MessageCountPill,
   PILL_COLORS,
+  Pill,
   RepoPill,
   ReportPill,
   SessionIdPill,

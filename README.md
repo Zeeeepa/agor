@@ -14,55 +14,32 @@ Agor turns every AI session into a composable, inspectable, and reusable buildin
 
 ---
 
-## 🚀 Try Agor in GitHub Codespaces
+## 🚀 Try Agor (No Installation Required)
 
-**No installation required** – Choose your experience:
+### 🎮 GitHub Codespaces Playground
 
-### 🎮 Playground (Recommended for first-timers)
+**Fastest way to try Agor** – Production-ready environment in ~10-20s:
 
-**Fast boot** (~10-20s) – Pre-built production binaries, ready to explore:
-
-[![Open Playground in Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/mistercrunch/agor?quickstart=1&devcontainer_path=.devcontainer%2Fplayground%2Fdevcontainer.json)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/mistercrunch/agor?quickstart=1&devcontainer_path=.devcontainer%2Fplayground%2Fdevcontainer.json)
 
 **What you get:**
 
-- ⚡ Ultra-fast startup (no build step)
-- ✅ Production-like environment
+- ⚡ Ultra-fast startup (pre-built binaries)
 - ✅ Pre-installed AI CLIs (Claude Code, Codex, Gemini)
 - ✅ Full multiplayer support
-- 📦 Read-only experience (perfect for demos)
+- 🌐 Port-forwarded URLs for collaboration
+- 📦 Perfect for demos and exploration
 
-### 🛠️ Development (For contributors)
-
-**Full dev environment** (~60-90s) – Editable source, hot reload:
-
-[![Open Dev in Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/mistercrunch/agor?quickstart=1&devcontainer_path=.devcontainer%2Fdev%2Fdevcontainer.json)
-
-**What you get:**
-
-- 🔥 Hot module reload (Vite HMR)
-- ✏️ Editable source code
-- 🧪 Development tools and debugger
-- 🔧 Modify and contribute to Agor
-
----
-
-**⚠️ Both modes:**
-
-- Early beta - Not production-ready
-- Ephemeral data (lost on rebuild)
-- Codespaces free tier: 60 hours/month ([check usage](https://github.com/settings/billing))
+**⚠️ Note:** Early beta, ephemeral data (lost on rebuild), Codespaces free tier: 60 hours/month ([check usage](https://github.com/settings/billing))
 
 **Getting Started:**
 
-1. Click badge above → Services auto-start
+1. Click badge above → Services auto-start (~10-20s)
 2. Open forwarded port 5173 (UI) in browser
-3. Create a session and start orchestrating!
+3. Login: `admin@agor.live` / `admin`
+4. Create a session and start orchestrating!
 
-**For collaboration:**
-
-1. Ports panel → Right-click 5173 → Port Visibility → Public
-2. Share the public URL with teammates
+**For collaboration:** Ports panel → Right-click 5173 → Port Visibility → Public → Share URL
 
 ---
 
@@ -186,11 +163,15 @@ Additional visuals to consider:
 - Build **kanban-style flows** or custom pipelines: analyze → develop → review → deploy.
 - Combine with context templates to automate arbitrarily complex workflows.
 
-### 🌳 **Git Worktree Management, Simplified**
+### 🌳 **Git Worktree Management + Lightweight Environments**
 
 - Every session maps to an isolated **git worktree** — no branch conflicts.
-- Run A/B tests between agents: same repo, different worktrees, different models.
-- Track which agent produced which code — a full audit trail between commits and conversations.
+- **One-click environment control** from the UI — configure start/stop commands, health endpoints, and URLs per repo.
+- Automatic **port management** (each worktree gets unique ports) and **health monitoring** with status indicators.
+- Run **multiple feature branches in parallel** with their own running apps (e.g., feature/auth on :4000, feature/payments on :5000).
+- Works with any stack: `docker compose up`, `npm run dev`, `./manage.py runserver` — just configure in UI once.
+- **Shared environments** across sessions on the same worktree — multiple agents collaborating on running code.
+- **Visual status tracking** — see which environments are running, stopped, or unhealthy at a glance.
 
 ### 🕹️ **Real-Time Strategy for AI Teams**
 
@@ -204,31 +185,51 @@ Additional visuals to consider:
 
 - **Collaborative AI development boards** shared by teams.
 - **A/B testing frameworks** comparing agent outputs across tools.
-- **Custom “zone-triggered” automation flows**, from idea to deployment.
+- **Parallel feature development** with isolated environments per branch.
+- **Custom "zone-triggered" automation flows**, from idea to deployment.
 - **Knowledge maps** of all AI interactions across projects.
 - **Cross-agent orchestration** for hybrid Claude–Codex–Gemini workflows.
+
+### Example: Multi-Feature Parallel Development
+
+```bash
+# Worktree 1: feature/auth (Claude Code)
+Environment: http://localhost:4000
+Sessions: 2 (one for frontend, one for backend)
+
+# Worktree 2: feature/payments (Codex)
+Environment: http://localhost:5000
+Sessions: 1 (Stripe integration)
+
+# Worktree 3: feature/analytics (Gemini)
+Environment: http://localhost:6000
+Sessions: 1 (dashboard implementation)
+```
+
+All running simultaneously, each with their own isolated code + environment, orchestrated from one Agor board.
 
 ---
 
 ## 🧱 Key Features
 
-| Capability                   | Description                                              |
-| ---------------------------- | -------------------------------------------------------- |
-| **Agent SDKs**               | Unified API for Claude Code, Codex, Gemini (and others). |
-| **Session Tree**             | Tracks forks, spawns, and context evolution visually.    |
-| **Multiplayer Canvas**       | Real-time presence, drag-and-drop organization.          |
-| **Zone Triggers**            | User-defined prompt automations.                         |
-| **Git Worktrees**            | Parallel branches per session.                           |
-| **Context Modules**          | Markdown-based, composable context system.               |
-| **MCP Hub**                  | Centralized MCP configuration and sharing.               |
-| **Reports (Coming Soon)**    | Automatic agent-generated task summaries.                |
-| **Federated Mode (Planned)** | Cross-tool, cross-org session federation.                |
+| Capability                   | Description                                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------------------------------ |
+| **Agent SDKs**               | Unified API for Claude Code, Codex, Gemini (and others).                                         |
+| **Session Tree**             | Tracks forks, spawns, and context evolution visually.                                            |
+| **Multiplayer Canvas**       | Real-time presence, drag-and-drop organization.                                                  |
+| **Zone Triggers**            | User-defined prompt automations.                                                                 |
+| **Git Worktrees**            | Parallel branches per session.                                                                   |
+| **Environment Management**   | UI-driven start/stop/status control for dev environments per worktree with auto port management. |
+| **Context Modules**          | Markdown-based, composable context system.                                                       |
+| **MCP Hub**                  | Centralized MCP configuration and sharing.                                                       |
+| **Reports (Coming Soon)**    | Automatic agent-generated task summaries.                                                        |
+| **Federated Mode (Planned)** | Cross-tool, cross-org session federation.                                                        |
 
 ---
 
-## 🛠️ Quick Start
+## 🛠️ Local Development & Trial
 
-### Docker (Recommended)
+### Docker (Recommended for Local Trial)
 
 **One command to run everything:**
 
@@ -238,11 +239,27 @@ cd agor
 docker compose up
 ```
 
-- **UI:** http://localhost:5173
-- **Login:** admin@agor.live / admin
-- **Hot-reload enabled** — edit source files and see changes instantly
+**What you get:**
 
-**For multiple worktrees/branches:**
+- 🎨 **UI:** http://localhost:5173
+- 🔐 **Login:** `admin@agor.live` / `admin`
+- 🔥 **Hot-reload enabled** — edit source files and see changes instantly
+- 💾 **Persistent data** — database saved in Docker volume
+
+**Running `agor` CLI inside Docker:**
+
+```bash
+# Initialize (already done automatically on first run)
+docker compose exec agor-dev pnpm agor init
+
+# Import Claude Code sessions
+docker compose exec agor-dev pnpm agor session load-claude <session-id>
+
+# List sessions
+docker compose exec agor-dev pnpm agor session list
+```
+
+**Multiple worktrees/branches:**
 
 ```bash
 # Main branch
@@ -270,18 +287,6 @@ cd apps/agor-daemon && pnpm dev  # :3030
 
 # Terminal 2: UI
 cd apps/agor-ui && pnpm dev      # :5173
-```
-
-### Import Sessions
-
-Import a Claude Code session and visualize it instantly:
-
-```bash
-# Via Docker
-docker compose exec agor-dev pnpm agor session load-claude <session-id>
-
-# Via local CLI
-pnpm agor session load-claude <session-id>
 ```
 
 ---

@@ -48,6 +48,50 @@ interface BasePillProps {
   style?: React.CSSProperties;
 }
 
+/**
+ * Base Pill component - standardized Tag wrapper with consistent styling
+ *
+ * Provides:
+ * - Monospace font (token.fontFamilyCode) for content
+ * - Consistent icon sizing (12px)
+ * - Standard Tag dimensions (22px height, 7px padding)
+ * - Consistent line-height for vertical alignment
+ *
+ * DO NOT accept style prop - all styling is standardized internally
+ */
+interface PillProps {
+  icon?: React.ReactNode;
+  color?: string;
+  children: React.ReactNode;
+  onClick?: (e: React.MouseEvent) => void;
+  tooltip?: string;
+}
+
+export const Pill: React.FC<PillProps> = ({
+  icon,
+  color = 'default',
+  children,
+  onClick,
+  tooltip,
+}) => {
+  const { token } = theme.useToken();
+
+  const tag = (
+    <Tag
+      icon={icon}
+      color={color}
+      style={{
+        cursor: onClick ? 'pointer' : 'default',
+      }}
+      onClick={onClick}
+    >
+      <span style={{ fontFamily: token.fontFamilyCode, lineHeight: 1 }}>{children}</span>
+    </Tag>
+  );
+
+  return tooltip ? <span title={tooltip}>{tag}</span> : tag;
+};
+
 interface MessageCountPillProps extends BasePillProps {
   count: number;
 }
@@ -266,19 +310,27 @@ interface WorktreePillProps extends BasePillProps {
   managed?: boolean;
 }
 
-export const WorktreePill: React.FC<WorktreePillProps> = ({ managed = true, style }) => (
-  <Tag color={PILL_COLORS.worktree} style={style}>
-    {managed ? 'Managed' : 'Worktree'}
-  </Tag>
-);
+export const WorktreePill: React.FC<WorktreePillProps> = ({ managed = true, style }) => {
+  const { token } = theme.useToken();
+
+  return (
+    <Tag color={PILL_COLORS.worktree} style={style}>
+      <span style={{ fontFamily: token.fontFamilyCode }}>{managed ? 'Managed' : 'Worktree'}</span>
+    </Tag>
+  );
+};
 
 interface DirtyStatePillProps extends BasePillProps {}
 
-export const DirtyStatePill: React.FC<DirtyStatePillProps> = ({ style }) => (
-  <Tag icon={<EditOutlined />} color={PILL_COLORS.warning} style={style}>
-    uncommitted changes
-  </Tag>
-);
+export const DirtyStatePill: React.FC<DirtyStatePillProps> = ({ style }) => {
+  const { token } = theme.useToken();
+
+  return (
+    <Tag icon={<EditOutlined />} color={PILL_COLORS.warning} style={style}>
+      <span style={{ fontFamily: token.fontFamilyCode }}>uncommitted changes</span>
+    </Tag>
+  );
+};
 
 interface BranchPillProps extends BasePillProps {
   branch: string;

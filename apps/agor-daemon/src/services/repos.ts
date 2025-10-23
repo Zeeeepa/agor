@@ -42,6 +42,51 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
   }
 
   /**
+   * Override patch to recompute access URLs when environment_config changes
+   */
+  async patch(id: string, data: Partial<Repo>, params?: RepoParams): Promise<Repo> {
+    // Check if environment_config is being updated
+    const isUpdatingEnvConfig = !!data.environment_config;
+
+    // Perform the patch
+    const updatedRepo = await super.patch(id, data, params);
+
+    // If environment config was updated, recompute URLs for all active worktrees
+    if (isUpdatingEnvConfig) {
+      console.log(
+        `🔄 Environment config updated for repo ${updatedRepo.slug} - recomputing access URLs...`
+      );
+
+      const worktreesService = this.app.service('worktrees');
+      const worktreesResult = await worktreesService.find({
+        query: { repo_id: id, $limit: 1000 },
+        paginate: false,
+      });
+
+      const worktrees = (
+        Array.isArray(worktreesResult) ? worktreesResult : worktreesResult.data
+      ) as Worktree[];
+
+      // Recompute URLs for each active worktree
+      for (const worktree of worktrees) {
+        const status = worktree.environment_instance?.status;
+        if (status === 'running' || status === 'starting') {
+          // Call recomputeAccessUrls method (exists on WorktreesService but not typed on base service)
+          await (
+            worktreesService as unknown as {
+              recomputeAccessUrls: (id: string) => Promise<Worktree>;
+            }
+          ).recomputeAccessUrls(worktree.worktree_id);
+        }
+      }
+
+      console.log(`✅ Recomputed access URLs for ${worktrees.length} worktree(s)`);
+    }
+
+    return updatedRepo;
+  }
+
+  /**
    * Custom method: Find repo by slug
    */
   async findBySlug(slug: string, _params?: RepoParams): Promise<Repo | null> {

@@ -135,6 +135,26 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       ...environmentUpdate,
     } as Worktree['environment_instance'];
 
+    // Check if environment state actually changed (ignoring timestamp-only updates)
+    // For health checks, we only care about status and message changes, not timestamp
+    const oldState = { ...existing.environment_instance };
+    const newState = { ...updatedEnvironment };
+
+    // Remove timestamps for comparison
+    if (oldState?.last_health_check) {
+      delete oldState.last_health_check.timestamp;
+    }
+    if (newState?.last_health_check) {
+      delete newState.last_health_check.timestamp;
+    }
+
+    const hasChanged = JSON.stringify(oldState) !== JSON.stringify(newState);
+
+    // Only emit WebSocket event if state changed
+    if (!hasChanged) {
+      return existing;
+    }
+
     const worktree = await this.patch(
       id,
       {
@@ -215,12 +235,20 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
         childProcess.on('error', reject);
       });
 
+      // Compute access URLs from app_url_template if available
+      let access_urls: Array<{ name: string; url: string }> | undefined;
+      if (repo.environment_config.app_url_template) {
+        const url = renderTemplate(repo.environment_config.app_url_template, templateContext);
+        access_urls = [{ name: 'App', url }];
+      }
+
       // Update status to 'running' - now rely on health checks to monitor
       return await this.updateEnvironment(
         id,
         {
           status: 'running',
           process: undefined, // No subprocess to track
+          access_urls,
         },
         params
       );
@@ -364,14 +392,16 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     const worktree = await this.get(id, params);
     const repo = (await this.app.service('repos').get(worktree.repo_id)) as Repo;
 
-    // If not running, return current state
-    if (worktree.environment_instance?.status !== 'running') {
+    // Only check health for 'running' or 'starting' status
+    const currentStatus = worktree.environment_instance?.status;
+    if (currentStatus !== 'running' && currentStatus !== 'starting') {
       return worktree;
     }
 
     // Check if we have a health check URL
     if (!repo.environment_config?.health_check?.url_template) {
-      // No health check configured - assume healthy if process is running
+      // No health check configured - stay in 'starting' forever (manual intervention required)
+      // Don't auto-transition to 'running' without health check confirmation
       const managedProcess = this.processes.get(id);
       const isProcessAlive = managedProcess?.process && !managedProcess.process.killed;
 
@@ -415,9 +445,19 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
         `🏥 Health check response for ${worktree.name}: HTTP ${response.status} ${response.statusText} (${isHealthy ? 'healthy' : 'unhealthy'})`
       );
 
+      // If health check succeeds and we're in 'starting' state, transition to 'running'
+      const shouldTransitionToRunning = isHealthy && currentStatus === 'starting';
+
+      if (shouldTransitionToRunning) {
+        console.log(
+          `✅ First successful health check for ${worktree.name} - transitioning to 'running'`
+        );
+      }
+
       return await this.updateEnvironment(
         id,
         {
+          status: shouldTransitionToRunning ? 'running' : currentStatus,
           last_health_check: {
             timestamp: new Date().toISOString(),
             status: isHealthy ? 'healthy' : 'unhealthy',
@@ -451,6 +491,43 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
         params
       );
     }
+  }
+
+  /**
+   * Custom method: Recompute access URLs for a running environment
+   *
+   * Called when repo environment_config is updated to refresh URLs without restart
+   */
+  async recomputeAccessUrls(id: WorktreeID, params?: WorktreeParams): Promise<Worktree> {
+    const worktree = await this.get(id, params);
+    const repo = (await this.app.service('repos').get(worktree.repo_id)) as Repo;
+
+    // Only recompute if environment is running or starting
+    const status = worktree.environment_instance?.status;
+    if (status !== 'running' && status !== 'starting') {
+      console.log(`   Skipping ${worktree.name} - not active (status: ${status})`);
+      return worktree;
+    }
+
+    // Compute access URLs from app_url_template
+    let access_urls: Array<{ name: string; url: string }> | undefined;
+    if (repo.environment_config?.app_url_template) {
+      const templateContext = this.buildTemplateContext(worktree, repo);
+      const url = renderTemplate(repo.environment_config.app_url_template, templateContext);
+      access_urls = [{ name: 'App', url }];
+      console.log(`   Recomputed access URL for ${worktree.name}: ${url}`);
+    } else {
+      console.log(`   Cleared access URL for ${worktree.name} - no template configured`);
+    }
+
+    // Update environment with new URLs (this will broadcast via WebSocket if changed)
+    return await this.updateEnvironment(
+      id,
+      {
+        access_urls,
+      },
+      params
+    );
   }
 
   /**

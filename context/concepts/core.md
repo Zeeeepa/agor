@@ -32,7 +32,7 @@ Build the orchestration layer for AI-assisted development. Instead of competing 
 - **Context-Aware Development** - Manage deliberate context via `context/` folder of markdown files. Dynamically load modular context blocks per session.
 - **Native Session Forking & Subtask Forcing** - Fork any session to explore alternatives. Spawn subtasks with fresh context windows. Full introspection and genealogy tracking.
 - **Zone Triggers — Workflows Made Spatial** - Define zones on your board that trigger templated prompts when sessions are dropped. Build kanban-style flows or custom pipelines.
-- **Git Worktree Management** - Every session maps to an isolated git worktree—no branch conflicts. Run A/B tests between agents on the same repo.
+- **Git Worktree Management + Environments** - Every session maps to an isolated git worktree—no branch conflicts. Optionally spin up dev environments per worktree with automatic port management and health monitoring. Run multiple feature branches in parallel with their own running apps.
 - **Real-Time Strategy for AI Teams** - Coordinate agentic work like a multiplayer RTS. Watch teammates or agents move across tasks live.
 
 ## The Five Primitives
@@ -116,22 +116,70 @@ Task 1: "Implement auth"
 4. Agent produces structured report
 5. Report saved, ephemeral session discarded
 
-### 4. Worktree - Isolated Git Workspaces
+### 4. Worktree - Isolated Git Workspaces + Environments
 
-**Agor can manage git worktrees** for session isolation (optional but powerful).
+**Agor manages git worktrees with optional environments** for session isolation.
 
 ```
 Main worktree: ~/my-project (main branch)
-Session A → ~/my-project-auth (feature/auth)
-Session B → ~/my-project-graphql (feature/graphql)
+Session A → ~/my-project-auth (feature/auth) + docker compose environment
+Session B → ~/my-project-graphql (feature/graphql) + isolated dev server
 ```
 
-**Benefits:**
+**Git Isolation Benefits:**
 
 - Parallel sessions don't interfere
 - Clean separation of experimental work
 - Agents work in isolation
 - Easy cleanup (delete worktree = delete experiment)
+
+**Environment Management (Optional):**
+
+Agor can spin up and manage development environments for each worktree via the **UI** (or CLI):
+
+**Configuration via UI:**
+
+In the Repositories settings panel, configure environment controls for any repo:
+
+- **Start command:** `docker compose up -d` (or `npm run dev`, `./manage.py runserver`, etc.)
+- **Stop command:** `docker compose down` (or any cleanup command)
+- **Health endpoint:** `http://localhost:{{PORT}}/health` (checks if app is running)
+- **URL template:** `http://localhost:{{PORT}}` (launches the running app)
+- **Port offset:** 1000 (base port + 1000 × worktree index)
+
+**What This Enables:**
+
+- **Multi-worktree apps running in parallel** - Test feature/auth on :4000 while feature/graphql runs on :5000
+- **Environment status monitoring** - Agor pings health endpoints, shows running/stopped state in UI
+- **One-click start/stop** - Control buttons in WorktreesTable for each worktree
+- **One-click access** - "Open App" button launches the running environment in browser
+- **Automatic port management** - Each worktree gets unique ports, no conflicts
+- **Shared across sessions** - Multiple sessions on same worktree share the environment
+
+**Example: React App with Backend**
+
+```
+Worktree 1: feature/auth
+├─ Environment: Running ✅
+├─ Ports: 4000-4001
+├─ URL: http://localhost:4000
+└─ Sessions: 2 (Claude + Codex both testing auth)
+
+Worktree 2: feature/payments
+├─ Environment: Stopped 🔴
+├─ Ports: 5000-5001
+├─ URL: http://localhost:5000
+└─ Sessions: 1 (Gemini implementing Stripe)
+```
+
+**Lightweight, No Lock-in:**
+
+- Configure once in UI, works for all worktrees
+- Uses your existing docker-compose.yml (or any command)
+- Agor just manages start/stop/status via shell commands
+- Works with any stack (Django, Rails, Next.js, Laravel, etc.)
+- Stop environment → resources freed immediately
+- Delete worktree → environment auto-cleaned up
 
 ### 5. Concept - Modular Context Nuggets
 

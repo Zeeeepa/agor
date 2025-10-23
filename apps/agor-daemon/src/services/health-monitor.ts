@@ -61,14 +61,15 @@ export class HealthMonitor {
 
     console.log(`🏥 Worktree update received: ${worktree.name} - status: ${status}`);
 
-    if (status === 'running') {
+    if (status === 'running' || status === 'starting') {
       // Start monitoring if not already monitored
+      // Monitor both 'running' and 'starting' - health checks will transition 'starting' → 'running'
       if (!this.intervals.has(worktree.worktree_id)) {
         console.log(`🏥 Starting health monitoring for worktree: ${worktree.name}`);
         this.startMonitoring(worktree.worktree_id);
       }
     } else {
-      // Stop monitoring if status is not running
+      // Stop monitoring if status is not running or starting
       if (this.intervals.has(worktree.worktree_id)) {
         console.log(`🏥 Stopping health monitoring for worktree: ${worktree.name}`);
         this.stopMonitoring(worktree.worktree_id);
@@ -121,9 +122,10 @@ export class HealthMonitor {
       // Get current worktree state
       const worktree = await worktreesService.get(worktreeId);
 
-      // Only check if still running
-      if (worktree.environment_instance?.status !== 'running') {
-        console.log(`🏥 Worktree ${worktree.name} no longer running, stopping monitoring`);
+      // Only check if still running or starting
+      const status = worktree.environment_instance?.status;
+      if (status !== 'running' && status !== 'starting') {
+        console.log(`🏥 Worktree ${worktree.name} no longer running/starting, stopping monitoring`);
         this.stopMonitoring(worktreeId);
         return;
       }
@@ -172,16 +174,20 @@ export class HealthMonitor {
       // Handle both paginated and non-paginated responses
       const worktrees = (Array.isArray(result) ? result : result.data) as Worktree[];
 
-      // Start monitoring running worktrees
-      const runningWorktrees = worktrees.filter(w => w.environment_instance?.status === 'running');
+      // Start monitoring running or starting worktrees
+      const activeWorktrees = worktrees.filter(
+        w =>
+          w.environment_instance?.status === 'running' ||
+          w.environment_instance?.status === 'starting'
+      );
 
-      if (runningWorktrees.length > 0) {
-        console.log(`   Found ${runningWorktrees.length} running environment(s)`);
-        for (const worktree of runningWorktrees) {
+      if (activeWorktrees.length > 0) {
+        console.log(`   Found ${activeWorktrees.length} active environment(s)`);
+        for (const worktree of activeWorktrees) {
           this.startMonitoring(worktree.worktree_id);
         }
       } else {
-        console.log('   No running environments found');
+        console.log('   No active environments found');
       }
     } catch (error) {
       console.error('❌ Failed to initialize Health Monitor:', error);

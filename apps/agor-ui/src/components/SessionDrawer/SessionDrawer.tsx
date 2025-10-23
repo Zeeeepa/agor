@@ -32,6 +32,7 @@ import {
 } from 'antd';
 import React from 'react';
 import { ConversationView } from '../ConversationView';
+import { EnvironmentPill } from '../EnvironmentPill';
 import { CreatedByTag } from '../metadata';
 import { PermissionModeSelector } from '../PermissionModeSelector';
 import {
@@ -301,13 +302,29 @@ const SessionDrawer = ({
         const worktree = worktrees.find(w => w.worktree_id === session.worktree_id);
         const repo = worktree ? repos.find(r => r.repo_id === worktree.repo_id) : null;
 
-        return worktree && repo ? (
+        return worktree ? (
           <div style={{ marginBottom: token.sizeUnit }}>
-            <RepoPill
-              repoName={repo.slug}
-              worktreeName={worktree.name}
-              onClick={onOpenWorktree ? () => onOpenWorktree(worktree.worktree_id) : undefined}
-            />
+            <Space size={8} wrap>
+              {repo && (
+                <RepoPill
+                  repoName={repo.slug}
+                  worktreeName={worktree.name}
+                  onClick={onOpenWorktree ? () => onOpenWorktree(worktree.worktree_id) : undefined}
+                />
+              )}
+              <EnvironmentPill
+                repo={repo || ({} as Repo)}
+                worktree={worktree}
+                onEdit={
+                  onOpenWorktree
+                    ? () => {
+                        onClose(); // Close drawer first to avoid focus trap
+                        onOpenWorktree(worktree.worktree_id);
+                      }
+                    : undefined
+                }
+              />
+            </Space>
           </div>
         ) : null;
       })()}
