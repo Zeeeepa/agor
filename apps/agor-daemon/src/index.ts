@@ -64,6 +64,7 @@ import type {
   SessionsServiceImpl,
   TasksServiceImpl,
 } from './declarations';
+import { createBoardObjectsService } from './services/board-objects';
 import { createBoardsService } from './services/boards';
 import { createContextService } from './services/context';
 import { createHealthMonitor } from './services/health-monitor';
@@ -284,6 +285,9 @@ async function main() {
   });
 
   app.use('/boards', createBoardsService(db));
+
+  // Register board-objects service (positioned entities on boards)
+  app.use('/board-objects', createBoardObjectsService(db));
 
   // Register worktrees service first (repos service needs to access it)
   // NOTE: Pass app instance for environment management (needs to access repos service)
@@ -1379,12 +1383,24 @@ async function main() {
       const findResult = boardsResult as Board[] | Paginated<Board>;
       const boards = isPaginated(findResult) ? findResult.data : findResult;
 
-      // Remove session from any boards that contain it
-      for (const board of boards) {
-        if (board.sessions?.includes(session.session_id)) {
-          await boardsService.removeSession(board.board_id, session.session_id);
-          console.log(`Removed session ${session.session_id} from board ${board.name}`);
+      // Remove session from any boards (via board-objects service)
+      try {
+        const boardObjectsResult = await app.service('board-objects').find({
+          query: { session_id: session.session_id },
+        });
+
+        const boardObjects = isPaginated(boardObjectsResult)
+          ? boardObjectsResult.data
+          : boardObjectsResult;
+
+        for (const boardObject of boardObjects) {
+          await app.service('board-objects').remove(boardObject.object_id);
+          console.log(
+            `Removed session ${session.session_id} from board (object ${boardObject.object_id})`
+          );
         }
+      } catch (error) {
+        console.error('Failed to remove session board objects:', error);
       }
     } catch (error) {
       console.error('Failed to remove session from boards:', error);

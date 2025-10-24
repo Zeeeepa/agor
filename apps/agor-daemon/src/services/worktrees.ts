@@ -153,6 +153,62 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
   }
 
   /**
+   * Custom method: Add worktree to board
+   *
+   * Phase 0: Sets board_id on worktree
+   * Phase 1: Will also create board_object entry for positioning
+   */
+  async addToBoard(id: WorktreeID, boardId: UUID, params?: WorktreeParams): Promise<Worktree> {
+    // Set worktree.board_id
+    const worktree = await this.patch(
+      id,
+      {
+        board_id: boardId,
+        updated_at: new Date().toISOString(),
+      },
+      params
+    );
+
+    // TODO (Phase 1): Create board_object entry for positioning
+    // await this.app.service('board-objects').create({
+    //   board_id: boardId,
+    //   object_type: 'worktree',
+    //   worktree_id: id,
+    //   position: { x: 100, y: 100 }, // Default position
+    // });
+
+    return worktree as Worktree;
+  }
+
+  /**
+   * Custom method: Remove worktree from board
+   *
+   * Phase 0: Clears board_id on worktree
+   * Phase 1: Will also remove board_object entry
+   */
+  async removeFromBoard(id: WorktreeID, params?: WorktreeParams): Promise<Worktree> {
+    // Clear worktree.board_id
+    const worktree = await this.patch(
+      id,
+      {
+        board_id: undefined,
+        updated_at: new Date().toISOString(),
+      },
+      params
+    );
+
+    // TODO (Phase 1): Remove board_object entry
+    // const objects = await this.app.service('board-objects').find({
+    //   query: { worktree_id: id },
+    // });
+    // for (const obj of objects.data) {
+    //   await this.app.service('board-objects').remove(obj.object_id);
+    // }
+
+    return worktree as Worktree;
+  }
+
+  /**
    * Custom method: Update environment status
    */
   async updateEnvironment(

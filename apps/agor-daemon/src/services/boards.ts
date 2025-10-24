@@ -44,40 +44,19 @@ export class BoardsService extends DrizzleService<Board, Partial<Board>, BoardPa
   }
 
   /**
-   * Custom method: Add session to board
+   * DEPRECATED: Add session to board
+   * Use board-objects service instead
    */
-  async addSession(id: string, sessionId: string, params?: BoardParams): Promise<Board> {
-    const board = await this.get(id, params);
-    const sessions = board.sessions || [];
-
-    // Avoid duplicates
-    if (sessions.includes(sessionId as SessionID)) {
-      return board;
-    }
-
-    return this.patch(
-      id,
-      {
-        sessions: [...sessions, sessionId as SessionID],
-      },
-      params
-    ) as Promise<Board>;
+  async addSession(_id: string, _sessionId: string, _params?: BoardParams): Promise<Board> {
+    throw new Error('addSession is deprecated - use board-objects service');
   }
 
   /**
-   * Custom method: Remove session from board
+   * DEPRECATED: Remove session from board
+   * Use board-objects service instead
    */
-  async removeSession(id: string, sessionId: string, params?: BoardParams): Promise<Board> {
-    const board = await this.get(id, params);
-    const sessions = board.sessions || [];
-
-    return this.patch(
-      id,
-      {
-        sessions: sessions.filter(sid => sid !== sessionId),
-      },
-      params
-    ) as Promise<Board>;
+  async removeSession(_id: string, _sessionId: string, _params?: BoardParams): Promise<Board> {
+    throw new Error('removeSession is deprecated - use board-objects service');
   }
 
   /**

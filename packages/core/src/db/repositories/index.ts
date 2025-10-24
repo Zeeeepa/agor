@@ -3,6 +3,7 @@
  */
 
 export * from './base';
+export * from './board-objects';
 export * from './boards';
 export * from './mcp-servers';
 export * from './messages';

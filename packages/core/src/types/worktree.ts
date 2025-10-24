@@ -1,5 +1,5 @@
 // src/types/worktree.ts
-import type { SessionID, UUID, WorktreeID } from './id';
+import type { BoardID, SessionID, UUID, WorktreeID } from './id';
 import type { WorktreeName } from './repo';
 
 /**
@@ -112,6 +112,14 @@ export interface Worktree {
   new_branch: boolean;
 
   // ===== Work Context (Persistent Across Sessions) =====
+
+  /**
+   * Board this worktree belongs to (if any)
+   *
+   * Worktrees can live on ONE board (not many).
+   * Sessions within the worktree are accessed through the worktree card.
+   */
+  board_id?: BoardID;
 
   /**
    * Associated GitHub/GitLab issue

@@ -28,10 +28,8 @@ export class BoardRepository implements BaseRepository<Board, Partial<Board>> {
   private rowToBoard(row: BoardRow): Board {
     const data = row.data as {
       description?: string;
-      sessions: string[];
       color?: string;
       icon?: string;
-      layout?: Record<string, { x: number; y: number; parentId?: string }>;
       objects?: Record<string, BoardObject>;
       custom_context?: Record<string, unknown>;
     };
@@ -46,7 +44,6 @@ export class BoardRepository implements BaseRepository<Board, Partial<Board>> {
         : new Date(row.created_at).toISOString(),
       created_by: row.created_by,
       ...data,
-      sessions: data.sessions.map(s => s as UUID),
     };
   }
 
@@ -66,10 +63,8 @@ export class BoardRepository implements BaseRepository<Board, Partial<Board>> {
       created_by: board.created_by ?? 'anonymous',
       data: {
         description: board.description,
-        sessions: board.sessions ?? [],
         color: board.color,
         icon: board.icon,
-        layout: board.layout,
         objects: board.objects,
         custom_context: board.custom_context,
       },
@@ -252,52 +247,20 @@ export class BoardRepository implements BaseRepository<Board, Partial<Board>> {
   }
 
   /**
-   * Add session to board
+   * DEPRECATED: Add session to board
+   * Use board-objects service instead
    */
-  async addSession(boardId: string, sessionId: string): Promise<Board> {
-    try {
-      const board = await this.findById(boardId);
-      if (!board) {
-        throw new EntityNotFoundError('Board', boardId);
-      }
-
-      if (!board.sessions.includes(sessionId as UUID)) {
-        board.sessions.push(sessionId as UUID);
-        return this.update(boardId, { sessions: board.sessions });
-      }
-
-      return board;
-    } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      if (error instanceof EntityNotFoundError) throw error;
-      throw new RepositoryError(
-        `Failed to add session to board: ${error instanceof Error ? error.message : String(error)}`,
-        error
-      );
-    }
-  }
+  // async addSession(boardId: string, sessionId: string): Promise<Board> {
+  //   throw new RepositoryError('addSession is deprecated - use board-objects service');
+  // }
 
   /**
-   * Remove session from board
+   * DEPRECATED: Remove session from board
+   * Use board-objects service instead
    */
-  async removeSession(boardId: string, sessionId: string): Promise<Board> {
-    try {
-      const board = await this.findById(boardId);
-      if (!board) {
-        throw new EntityNotFoundError('Board', boardId);
-      }
-
-      board.sessions = board.sessions.filter(id => id !== sessionId);
-      return this.update(boardId, { sessions: board.sessions });
-    } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      if (error instanceof EntityNotFoundError) throw error;
-      throw new RepositoryError(
-        `Failed to remove session from board: ${error instanceof Error ? error.message : String(error)}`,
-        error
-      );
-    }
-  }
+  // async removeSession(boardId: string, sessionId: string): Promise<Board> {
+  //   throw new RepositoryError('removeSession is deprecated - use board-objects service');
+  // }
 
   /**
    * Get default board (or create if doesn't exist)
@@ -420,89 +383,20 @@ export class BoardRepository implements BaseRepository<Board, Partial<Board>> {
   }
 
   /**
-   * Delete a zone and handle associated sessions
-   *
-   * @param boardId - Board ID containing the zone
-   * @param objectId - Zone object ID to delete
-   * @param deleteAssociatedSessions - If true, remove sessions from board; if false, unpin them
-   * @returns Updated board and list of affected session IDs
+   * DEPRECATED: Delete a zone and handle associated sessions
+   * TODO: Reimplement using board-objects table
    */
   async deleteZone(
     boardId: string,
     objectId: string,
-    deleteAssociatedSessions: boolean
+    _deleteAssociatedSessions: boolean
   ): Promise<{ board: Board; affectedSessions: string[] }> {
-    try {
-      const fullId = await this.resolveId(boardId);
-      const current = await this.findById(fullId);
-      if (!current) {
-        throw new EntityNotFoundError('Board', boardId);
-      }
-
-      // Check if object exists and is a zone
-      const zoneObject = current.objects?.[objectId];
-      if (!zoneObject) {
-        throw new EntityNotFoundError('Zone', objectId);
-      }
-      if (zoneObject.type !== 'zone') {
-        throw new RepositoryError(`Object ${objectId} is not a zone`);
-      }
-
-      // Find sessions pinned to this zone (sessions positioned within zone bounds)
-      const affectedSessions: string[] = [];
-      const zoneBounds = {
-        x: zoneObject.x,
-        y: zoneObject.y,
-        width: zoneObject.width,
-        height: zoneObject.height,
-      };
-
-      // Check each session's position
-      for (const sessionId of current.sessions) {
-        const position = current.layout?.[sessionId];
-        if (position) {
-          // Check if session is within zone bounds
-          const isInZone =
-            position.x >= zoneBounds.x &&
-            position.x <= zoneBounds.x + zoneBounds.width &&
-            position.y >= zoneBounds.y &&
-            position.y <= zoneBounds.y + zoneBounds.height;
-
-          if (isInZone) {
-            affectedSessions.push(sessionId);
-          }
-        }
-      }
-
-      // Remove the zone object
-      const updatedObjects = { ...(current.objects || {}) };
-      delete updatedObjects[objectId];
-
-      // Handle affected sessions
-      let updatedSessions = current.sessions;
-      if (deleteAssociatedSessions && affectedSessions.length > 0) {
-        // Remove affected sessions from board
-        updatedSessions = current.sessions.filter(id => !affectedSessions.includes(id));
-      }
-      // If not deleting, sessions remain on board (just unpinned from zone)
-
-      // Update board
-      const updatedBoard = await this.update(fullId, {
-        objects: updatedObjects,
-        sessions: updatedSessions,
-      });
-
-      return {
-        board: updatedBoard,
-        affectedSessions,
-      };
-    } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      if (error instanceof EntityNotFoundError) throw error;
-      throw new RepositoryError(
-        `Failed to delete zone: ${error instanceof Error ? error.message : String(error)}`,
-        error
-      );
-    }
+    // For now, just delete the zone object from annotations
+    // Session pinning will be handled by board-objects table in the future
+    const updatedBoard = await this.removeBoardObject(boardId, objectId);
+    return {
+      board: updatedBoard,
+      affectedSessions: [], // No sessions to track yet
+    };
   }
 }

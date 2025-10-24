@@ -1,9 +1,45 @@
-import type { BoardID, SessionID } from './id';
+import type { BoardID, SessionID, WorktreeID } from './id';
 
 /**
  * Board object types for canvas annotations
  */
 export type BoardObjectType = 'text' | 'zone';
+
+/**
+ * Entity types that can be positioned on boards (Phase 1: Hybrid support)
+ */
+export type BoardEntityType = 'session' | 'worktree';
+
+/**
+ * Positioned entity on a board (session or worktree card)
+ *
+ * Phase 1: Hybrid board support - boards can display BOTH session cards and worktree cards
+ * This enables gradual migration from session-centric to worktree-centric boards.
+ *
+ * Validation: Exactly ONE of session_id or worktree_id must be set
+ */
+export interface BoardEntityObject {
+  /** Unique object identifier */
+  object_id: string;
+
+  /** Board this entity belongs to */
+  board_id: BoardID;
+
+  /** Entity type discriminator */
+  object_type: BoardEntityType;
+
+  /** Session reference (for session cards) */
+  session_id?: SessionID;
+
+  /** Worktree reference (for worktree cards) */
+  worktree_id?: WorktreeID;
+
+  /** Position on canvas */
+  position: { x: number; y: number };
+
+  /** When this entity was added to the board */
+  created_at: string;
+}
 
 /**
  * Text annotation object
@@ -76,26 +112,16 @@ export interface Board {
 
   description?: string;
 
-  /** Session IDs in this board */
-  sessions: SessionID[];
-
   /**
-   * Session positions on the board canvas
+   * DEPRECATED: Sessions and layout are now tracked in board_objects table
    *
-   * Maps session_id -> {x, y} coordinates for React Flow
-   * Updated on drag events, isolated from other board operations
+   * Query board entities via:
+   * - boardObjectsService.find({ query: { board_id } })
    *
-   * Optional parentId pins session to a zone (zone ID)
-   * - When parentId is set, x/y are relative to zone's position
-   * - When parentId is undefined, x/y are absolute canvas coordinates
+   * Old fields removed:
+   * - sessions: SessionID[]
+   * - layout: { [sessionId: string]: { x, y, parentId? } }
    */
-  layout?: {
-    [sessionId: string]: {
-      x: number;
-      y: number;
-      parentId?: string; // Zone ID if pinned, undefined if unpinned
-    };
-  };
 
   /**
    * Canvas annotation objects (text labels, zones, etc.)

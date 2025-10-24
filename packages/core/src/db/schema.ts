@@ -215,10 +215,8 @@ export const boards = sqliteTable(
     data: text('data', { mode: 'json' })
       .$type<{
         description?: string;
-        sessions: string[]; // Session IDs
         color?: string;
         icon?: string;
-        layout?: Record<string, { x: number; y: number; parentId?: string }>; // Session positions
         objects?: Record<string, import('@agor/core/types').BoardObject>; // Board objects (text, zone)
         custom_context?: Record<string, unknown>; // Custom context for Handlebars templates
       }>()
@@ -293,6 +291,11 @@ export const worktrees = sqliteTable(
     ref: text('ref').notNull(), // Current branch/tag/commit
     worktree_unique_id: integer('worktree_unique_id').notNull(), // Auto-assigned sequential ID for templates
 
+    // Board relationship (nullable - worktrees can exist without boards)
+    board_id: text('board_id', { length: 36 }).references(() => boards.board_id, {
+      onDelete: 'set null', // If board is deleted, worktree remains but loses board association
+    }),
+
     // JSON blob for everything else
     data: text('data', { mode: 'json' })
       .$type<{
@@ -344,6 +347,7 @@ export const worktrees = sqliteTable(
     repoIdx: index('worktrees_repo_idx').on(table.repo_id),
     nameIdx: index('worktrees_name_idx').on(table.name),
     refIdx: index('worktrees_ref_idx').on(table.ref),
+    boardIdx: index('worktrees_board_idx').on(table.board_id),
     createdIdx: index('worktrees_created_idx').on(table.created_at),
     updatedIdx: index('worktrees_updated_idx').on(table.updated_at),
     // Composite unique constraint (repo + name)
@@ -478,6 +482,50 @@ export const mcpServers = sqliteTable(
 );
 
 /**
+ * Board Objects table - Positioned entities on boards (sessions or worktrees)
+ *
+ * Phase 1: Hybrid board support - boards can display BOTH session cards and worktree cards.
+ * This table tracks which entities (sessions or worktrees) are positioned on which boards.
+ *
+ * Replaces the old board.sessions[] + board.layout{} approach with a more flexible system.
+ */
+export const boardObjects = sqliteTable(
+  'board_objects',
+  {
+    // Primary identity
+    object_id: text('object_id', { length: 36 }).primaryKey(),
+    board_id: text('board_id', { length: 36 })
+      .notNull()
+      .references(() => boards.board_id, { onDelete: 'cascade' }),
+    created_at: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+
+    // Entity type and references
+    object_type: text('object_type', {
+      enum: ['session', 'worktree'],
+    }).notNull(),
+    session_id: text('session_id', { length: 36 }).references(() => sessions.session_id, {
+      onDelete: 'cascade',
+    }),
+    worktree_id: text('worktree_id', { length: 36 }).references(() => worktrees.worktree_id, {
+      onDelete: 'cascade',
+    }),
+
+    // Position data (JSON)
+    data: text('data', { mode: 'json' })
+      .$type<{
+        position: { x: number; y: number };
+      }>()
+      .notNull(),
+  },
+  table => ({
+    boardIdx: index('board_objects_board_idx').on(table.board_id),
+    sessionIdx: index('board_objects_session_idx').on(table.session_id),
+    worktreeIdx: index('board_objects_worktree_idx').on(table.worktree_id),
+    typeIdx: index('board_objects_type_idx').on(table.object_type),
+  })
+);
+
+/**
  * Session-MCP Servers relationship table
  *
  * Many-to-many relationship between sessions and MCP servers.
@@ -526,3 +574,5 @@ export type MCPServerRow = typeof mcpServers.$inferSelect;
 export type MCPServerInsert = typeof mcpServers.$inferInsert;
 export type SessionMCPServerRow = typeof sessionMcpServers.$inferSelect;
 export type SessionMCPServerInsert = typeof sessionMcpServers.$inferInsert;
+export type BoardObjectRow = typeof boardObjects.$inferSelect;
+export type BoardObjectInsert = typeof boardObjects.$inferInsert;
