@@ -246,6 +246,7 @@ const SessionCanvas = ({
       client,
       sessions,
       worktrees,
+      boardObjects,
       setNodes,
       deletedObjectsRef,
       eraserMode: activeTool === 'eraser',

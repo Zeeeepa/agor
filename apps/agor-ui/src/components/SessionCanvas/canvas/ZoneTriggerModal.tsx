@@ -92,16 +92,16 @@ export const ZoneTriggerModal = ({
       // Most recently updated running session
       return runningSessions.sort(
         (a, b) =>
-          new Date(b.updated_at || b.created_at).getTime() -
-          new Date(a.updated_at || a.created_at).getTime()
+          new Date(b.last_updated || b.created_at).getTime() -
+          new Date(a.last_updated || a.created_at).getTime()
       )[0].session_id;
     }
 
     // Otherwise most recent session
     return worktreeSessions.sort(
       (a, b) =>
-        new Date(b.updated_at || b.created_at).getTime() -
-        new Date(a.updated_at || a.created_at).getTime()
+        new Date(b.last_updated || b.created_at).getTime() -
+        new Date(a.last_updated || a.created_at).getTime()
     )[0].session_id;
   }, [worktreeSessions]);
 

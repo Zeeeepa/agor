@@ -36,7 +36,6 @@ import { type NewSessionConfig, NewSessionModal } from '../NewSessionModal';
 import { type NewWorktreeConfig, NewWorktreeModal } from '../NewWorktreeModal';
 import { SessionCanvas } from '../SessionCanvas';
 import SessionDrawer from '../SessionDrawer';
-import { SessionListDrawer } from '../SessionListDrawer';
 import { SessionSettingsModal } from '../SessionSettingsModal';
 import { SettingsModal } from '../SettingsModal';
 import { TerminalModal } from '../TerminalModal';

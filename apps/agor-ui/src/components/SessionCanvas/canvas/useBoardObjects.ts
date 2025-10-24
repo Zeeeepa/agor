@@ -3,7 +3,7 @@
  */
 
 import type { AgorClient } from '@agor/core/api';
-import type { Board, BoardObject, Session, Worktree } from '@agor/core/types';
+import type { Board, BoardEntityObject, BoardObject, Session, Worktree } from '@agor/core/types';
 import { useCallback, useMemo, useRef } from 'react';
 import type { Node } from 'reactflow';
 
@@ -12,6 +12,7 @@ interface UseBoardObjectsProps {
   client: AgorClient | null;
   sessions: Session[];
   worktrees: Worktree[];
+  boardObjects: BoardEntityObject[];
   setNodes: React.Dispatch<React.SetStateAction<Node[]>>;
   deletedObjectsRef: React.MutableRefObject<Set<string>>;
   eraserMode?: boolean;
@@ -22,6 +23,7 @@ export const useBoardObjects = ({
   client,
   sessions,
   worktrees,
+  boardObjects,
   setNodes,
   deletedObjectsRef,
   eraserMode = false,
@@ -64,47 +66,44 @@ export const useBoardObjects = ({
   );
 
   /**
-   * Delete a zone with session cleanup options
+   * Delete a zone (worktree-centric: zones can pin worktrees)
    */
   const deleteZone = useCallback(
-    async (objectId: string, deleteAssociatedSessions: boolean) => {
+    async (objectId: string, _deleteAssociatedSessions: boolean) => {
       if (!board || !client) return;
 
       // Mark as deleted to prevent re-appearance during WebSocket updates
       deletedObjectsRef.current.add(objectId);
 
-      // Find sessions that will be affected (pinned sessions via parentId)
-      const zoneObject = board.objects?.[objectId];
-      if (!zoneObject || zoneObject.type !== 'zone') return;
-
-      // Find affected sessions (those pinned to this zone)
-      const affectedSessionIds: string[] = [];
-      for (const sessionId of boardSessionIds) {
-        const position = board.layout?.[sessionId];
-        if (position?.parentId === objectId) {
-          affectedSessionIds.push(sessionId);
+      // Find worktrees that are pinned to this zone (via board_objects.zone_id)
+      const affectedWorktreeIds: string[] = [];
+      for (const boardObj of boardObjects) {
+        if (boardObj.zone_id === objectId) {
+          affectedWorktreeIds.push(boardObj.worktree_id);
         }
       }
 
-      // Optimistic removal of zone
-      setNodes(nodes => {
-        let updatedNodes = nodes.filter(n => n.id !== objectId);
-
-        // If deleting associated sessions, remove them too
-        if (deleteAssociatedSessions) {
-          updatedNodes = updatedNodes.filter(n => !affectedSessionIds.includes(n.id));
-        }
-
-        return updatedNodes;
-      });
+      // Optimistic removal of zone (just the zone node, worktrees remain but unpinned)
+      setNodes(nodes => nodes.filter(n => n.id !== objectId));
 
       try {
         await client.service('boards').patch(board.board_id, {
           _action: 'deleteZone',
           objectId,
-          deleteAssociatedSessions,
           // biome-ignore lint/suspicious/noExplicitAny: Board patch with custom _action field
         } as any);
+
+        // Unpin any worktrees that were pinned to this zone
+        for (const worktreeId of affectedWorktreeIds) {
+          const boardObj = boardObjects.find(
+            (obj: BoardEntityObject) => obj.worktree_id === worktreeId
+          );
+          if (boardObj) {
+            await client.service('board-objects').patch(boardObj.object_id, {
+              zone_id: null,
+            });
+          }
+        }
 
         // After successful deletion, we can remove from the tracking set
         setTimeout(() => {
@@ -117,7 +116,7 @@ export const useBoardObjects = ({
         // Note: WebSocket update should restore the actual state
       }
     },
-    [board, client, setNodes, deletedObjectsRef, boardSessionIds]
+    [board, client, setNodes, deletedObjectsRef, boardObjects]
   );
 
   /**
@@ -142,13 +141,15 @@ export const useBoardObjects = ({
         return hasValidPosition;
       })
       .map(([objectId, objectData]) => {
-        // Calculate session count for this zone (count pinned sessions via parentId)
+        // Calculate worktree count for this zone (worktree-centric model)
         let sessionCount = 0;
         if (objectData.type === 'zone') {
-          for (const sessionId of boardSessionIds) {
-            const position = board.layout?.[sessionId];
-            if (position?.parentId === objectId) {
-              sessionCount++;
+          // Count worktrees pinned to this zone via board_objects.zone_id
+          for (const boardObj of boardObjects) {
+            if (boardObj.zone_id === objectId) {
+              // Count sessions in this worktree
+              const worktreeSessions = sessions.filter(s => s.worktree_id === boardObj.worktree_id);
+              sessionCount += worktreeSessions.length;
             }
           }
         }
@@ -181,7 +182,7 @@ export const useBoardObjects = ({
           },
         };
       });
-  }, [board?.objects, board?.layout, boardSessionIds, handleUpdateObject, deleteZone, eraserMode]);
+  }, [board?.objects, boardObjects, sessions, handleUpdateObject, deleteZone, eraserMode]);
 
   /**
    * Add a zone node at the specified position
