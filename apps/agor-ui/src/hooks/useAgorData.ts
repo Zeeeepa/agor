@@ -6,13 +6,23 @@
  */
 
 import type { AgorClient } from '@agor/core/api';
+import type {
+  Board,
+  BoardEntityObject,
+  MCPServer,
+  Repo,
+  Session,
+  Task,
+  User,
+  Worktree,
+} from '@agor/core/types';
 import { useCallback, useEffect, useState } from 'react';
-import type { Board, MCPServer, Repo, Session, Task, User, Worktree } from '@agor/core/types';
 
 interface UseAgorDataResult {
   sessions: Session[];
   tasks: Record<string, Task[]>;
   boards: Board[];
+  boardObjects: BoardEntityObject[]; // Positioned worktrees on boards
   repos: Repo[];
   worktrees: Worktree[];
   users: User[];
@@ -33,6 +43,7 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [tasks, setTasks] = useState<Record<string, Task[]>>({});
   const [boards, setBoards] = useState<Board[]>([]);
+  const [boardObjects, setBoardObjects] = useState<BoardEntityObject[]>([]);
   const [repos, setRepos] = useState<Repo[]>([]);
   const [worktrees, setWorktrees] = useState<Worktree[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -51,11 +62,12 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
       setLoading(true);
       setError(null);
 
-      // Fetch sessions, tasks, boards, repos, worktrees, users, mcp servers, session-mcp relationships in parallel
+      // Fetch sessions, tasks, boards, board-objects, repos, worktrees, users, mcp servers, session-mcp relationships in parallel
       const [
         sessionsResult,
         tasksResult,
         boardsResult,
+        boardObjectsResult,
         reposResult,
         worktreesResult,
         usersResult,
@@ -65,6 +77,7 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
         client.service('sessions').find(),
         client.service('tasks').find({ query: { $limit: 500 } }), // Fetch up to 500 tasks
         client.service('boards').find(),
+        client.service('board-objects').find(),
         client.service('repos').find(),
         client.service('worktrees').find(),
         client.service('users').find(),
@@ -76,6 +89,9 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
       const sessionsList = Array.isArray(sessionsResult) ? sessionsResult : sessionsResult.data;
       const tasksList = Array.isArray(tasksResult) ? tasksResult : tasksResult.data;
       const boardsList = Array.isArray(boardsResult) ? boardsResult : boardsResult.data;
+      const boardObjectsList = Array.isArray(boardObjectsResult)
+        ? boardObjectsResult
+        : boardObjectsResult.data;
       const reposList = Array.isArray(reposResult) ? reposResult : reposResult.data;
       const worktreesList = Array.isArray(worktreesResult) ? worktreesResult : worktreesResult.data;
       const usersList = Array.isArray(usersResult) ? usersResult : usersResult.data;
@@ -99,6 +115,7 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
       setTasks(tasksMap);
 
       setBoards(boardsList);
+      setBoardObjects(boardObjectsList);
       setRepos(reposList);
       setWorktrees(worktreesList);
       setUsers(usersList);
@@ -192,6 +209,25 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
     boardsService.on('patched', handleBoardPatched);
     boardsService.on('updated', handleBoardPatched);
     boardsService.on('removed', handleBoardRemoved);
+
+    // Subscribe to board object events
+    const boardObjectsService = client.service('board-objects');
+    const handleBoardObjectCreated = (boardObject: BoardEntityObject) => {
+      setBoardObjects(prev => [...prev, boardObject]);
+    };
+    const handleBoardObjectPatched = (boardObject: BoardEntityObject) => {
+      setBoardObjects(prev =>
+        prev.map(bo => (bo.object_id === boardObject.object_id ? boardObject : bo))
+      );
+    };
+    const handleBoardObjectRemoved = (boardObject: BoardEntityObject) => {
+      setBoardObjects(prev => prev.filter(bo => bo.object_id !== boardObject.object_id));
+    };
+
+    boardObjectsService.on('created', handleBoardObjectCreated);
+    boardObjectsService.on('patched', handleBoardObjectPatched);
+    boardObjectsService.on('updated', handleBoardObjectPatched);
+    boardObjectsService.on('removed', handleBoardObjectRemoved);
 
     // Subscribe to repo events
     const reposService = client.service('repos');
@@ -307,6 +343,11 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
       boardsService.removeListener('updated', handleBoardPatched);
       boardsService.removeListener('removed', handleBoardRemoved);
 
+      boardObjectsService.removeListener('created', handleBoardObjectCreated);
+      boardObjectsService.removeListener('patched', handleBoardObjectPatched);
+      boardObjectsService.removeListener('updated', handleBoardObjectPatched);
+      boardObjectsService.removeListener('removed', handleBoardObjectRemoved);
+
       reposService.removeListener('created', handleRepoCreated);
       reposService.removeListener('patched', handleRepoPatched);
       reposService.removeListener('updated', handleRepoPatched);
@@ -336,6 +377,7 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
     sessions,
     tasks,
     boards,
+    boardObjects,
     repos,
     worktrees,
     users,

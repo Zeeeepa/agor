@@ -59,6 +59,7 @@ function AppContent() {
     sessions,
     tasks,
     boards,
+    boardObjects,
     repos,
     worktrees,
     users,
@@ -697,6 +698,7 @@ function AppContent() {
         tasks={tasks}
         availableAgents={availableAgents}
         boards={boards}
+        boardObjects={boardObjects}
         repos={repos}
         worktrees={worktrees}
         users={users}

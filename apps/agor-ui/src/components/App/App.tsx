@@ -1,6 +1,7 @@
 import type { AgorClient } from '@agor/core/api';
 import type {
   Board,
+  BoardEntityObject,
   BoardID,
   CreateUserInput,
   MCPServer,
@@ -53,6 +54,7 @@ export interface AppProps {
   tasks: Record<string, Task[]>;
   availableAgents: AgenticToolOption[];
   boards: Board[];
+  boardObjects: BoardEntityObject[]; // Positioned worktrees on boards
   repos: Repo[];
   worktrees: Worktree[];
   users: User[]; // All users for multiplayer metadata
@@ -106,6 +108,7 @@ export const App: React.FC<AppProps> = ({
   tasks,
   availableAgents,
   boards,
+  boardObjects,
   repos,
   worktrees,
   users,
@@ -247,10 +250,15 @@ export const App: React.FC<AppProps> = ({
     ? sessions.filter(s => s.worktree_id === selectedWorktree.worktree_id)
     : [];
 
-  // Filter sessions by current board
-  const boardSessions = sessions.filter(session =>
-    currentBoard?.sessions.includes(session.session_id)
-  );
+  // Filter worktrees by current board (via board_objects)
+  const boardWorktreeIds = boardObjects
+    .filter(bo => bo.board_id === currentBoard?.board_id)
+    .map(bo => bo.worktree_id);
+
+  const boardWorktrees = worktrees.filter(wt => boardWorktreeIds.includes(wt.worktree_id));
+
+  // Filter sessions by current board's worktrees
+  const boardSessions = sessions.filter(session => boardWorktreeIds.includes(session.worktree_id));
 
   // Track active users via cursor presence
   const { activeUsers } = usePresence({
@@ -292,7 +300,8 @@ export const App: React.FC<AppProps> = ({
           sessions={boardSessions}
           tasks={tasks}
           users={users}
-          worktrees={worktrees}
+          worktrees={boardWorktrees}
+          boardObjects={boardObjects}
           currentUserId={user?.user_id}
           mcpServers={mcpServers}
           sessionMcpServerIds={sessionMcpServerIds}
