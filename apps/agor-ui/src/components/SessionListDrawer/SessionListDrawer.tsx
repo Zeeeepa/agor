@@ -1,8 +1,8 @@
-import type { Board, Session } from '@agor/core/types';
+import type { Board, Session, Worktree } from '@agor/core/types';
 import { SearchOutlined } from '@ant-design/icons';
 import { Badge, Drawer, Input, List, Select, Space, Typography, theme } from 'antd';
 import type React from 'react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 const { Title } = Typography;
 const { useToken } = theme;
@@ -14,6 +14,7 @@ interface SessionListDrawerProps {
   currentBoardId: string;
   onBoardChange: (boardId: string) => void;
   sessions: Session[];
+  worktrees: Worktree[];
   onSessionClick: (sessionId: string) => void;
 }
 
@@ -24,17 +25,26 @@ export const SessionListDrawer: React.FC<SessionListDrawerProps> = ({
   currentBoardId,
   onBoardChange,
   sessions,
+  worktrees,
   onSessionClick,
 }) => {
   const { token } = useToken();
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Get current board
   const currentBoard = boards.find(b => b.board_id === currentBoardId);
 
-  // Filter sessions by current board
-  const boardSessions = sessions.filter(session =>
-    currentBoard?.sessions.includes(session.session_id)
-  );
+  // Filter sessions by current board (worktree-centric model)
+  const boardSessions = useMemo(() => {
+    // Get worktrees for this board
+    const boardWorktrees = worktrees.filter(wt => wt.board_id === currentBoardId);
+    const boardWorktreeIds = new Set(boardWorktrees.map(wt => wt.worktree_id));
+
+    // Get sessions for these worktrees
+    return sessions.filter(
+      session => session.worktree_id && boardWorktreeIds.has(session.worktree_id)
+    );
+  }, [sessions, worktrees, currentBoardId]);
 
   // Filter sessions by search query
   const filteredSessions = boardSessions.filter(

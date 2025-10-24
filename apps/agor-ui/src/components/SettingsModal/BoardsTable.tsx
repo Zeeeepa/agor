@@ -1,14 +1,16 @@
-import type { Board } from '@agor/core/types';
+import type { Board, Session, Worktree } from '@agor/core/types';
 import { DeleteOutlined, EditOutlined, PlusOutlined, SmileOutlined } from '@ant-design/icons';
 import { Button, Form, Input, Modal, Popconfirm, Popover, Space, Table, Typography } from 'antd';
 import EmojiPicker, { type EmojiClickData, Theme } from 'emoji-picker-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { JSONEditor, validateJSON } from '../JSONEditor';
 
 // Using Typography.Text directly to avoid DOM Text interface collision
 
 interface BoardsTableProps {
   boards: Board[];
+  sessions: Session[];
+  worktrees: Worktree[];
   onCreate?: (board: Partial<Board>) => void;
   onUpdate?: (boardId: string, updates: Partial<Board>) => void;
   onDelete?: (boardId: string) => void;
@@ -16,6 +18,8 @@ interface BoardsTableProps {
 
 export const BoardsTable: React.FC<BoardsTableProps> = ({
   boards,
+  sessions,
+  worktrees,
   onCreate,
   onUpdate,
   onDelete,
@@ -25,6 +29,26 @@ export const BoardsTable: React.FC<BoardsTableProps> = ({
   const [editingBoard, setEditingBoard] = useState<Board | null>(null);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [form] = Form.useForm();
+
+  // Calculate session count per board (worktree-centric model)
+  const boardSessionCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    boards.forEach(board => {
+      // Get worktrees for this board
+      const boardWorktrees = worktrees.filter(wt => wt.board_id === board.board_id);
+      const boardWorktreeIds = new Set(boardWorktrees.map(wt => wt.worktree_id));
+
+      // Count sessions for these worktrees
+      const sessionCount = sessions.filter(
+        session => session.worktree_id && boardWorktreeIds.has(session.worktree_id)
+      ).length;
+
+      counts.set(board.board_id, sessionCount);
+    });
+
+    return counts;
+  }, [boards, sessions, worktrees]);
 
   const handleEmojiClick = (emojiData: EmojiClickData) => {
     form.setFieldValue('icon', emojiData.emoji);
@@ -37,7 +61,6 @@ export const BoardsTable: React.FC<BoardsTableProps> = ({
         name: values.name,
         icon: values.icon || '📋',
         description: values.description,
-        sessions: [],
         custom_context: values.custom_context ? JSON.parse(values.custom_context) : undefined,
       });
       form.resetFields();
@@ -97,10 +120,9 @@ export const BoardsTable: React.FC<BoardsTableProps> = ({
     },
     {
       title: 'Sessions',
-      dataIndex: 'sessions',
       key: 'sessions',
       width: 100,
-      render: (sessions: string[]) => sessions.length,
+      render: (_: unknown, board: Board) => boardSessionCounts.get(board.board_id) || 0,
     },
     {
       title: 'Actions',

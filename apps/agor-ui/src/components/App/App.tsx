@@ -385,6 +385,7 @@ export const App: React.FC<AppProps> = ({
         currentBoardId={currentBoardId}
         onBoardChange={setCurrentBoardId}
         sessions={sessions}
+        worktrees={worktrees}
         onSessionClick={setSelectedSessionId}
       />
       <SettingsModal

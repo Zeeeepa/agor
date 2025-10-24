@@ -129,6 +129,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             children: (
               <BoardsTable
                 boards={boards}
+                sessions={sessions}
+                worktrees={worktrees}
                 onCreate={onCreateBoard}
                 onUpdate={onUpdateBoard}
                 onDelete={onDeleteBoard}
