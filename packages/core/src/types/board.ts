@@ -6,17 +6,10 @@ import type { BoardID, SessionID, WorktreeID } from './id';
 export type BoardObjectType = 'text' | 'zone';
 
 /**
- * Entity types that can be positioned on boards (Phase 1: Hybrid support)
- */
-export type BoardEntityType = 'session' | 'worktree';
-
-/**
- * Positioned entity on a board (session or worktree card)
+ * Positioned worktree card on a board
  *
- * Phase 1: Hybrid board support - boards can display BOTH session cards and worktree cards
- * This enables gradual migration from session-centric to worktree-centric boards.
- *
- * Validation: Exactly ONE of session_id or worktree_id must be set
+ * Boards display worktrees as primary units. Sessions are accessed
+ * through the worktree card's session tree.
  */
 export interface BoardEntityObject {
   /** Unique object identifier */
@@ -25,14 +18,8 @@ export interface BoardEntityObject {
   /** Board this entity belongs to */
   board_id: BoardID;
 
-  /** Entity type discriminator */
-  object_type: BoardEntityType;
-
-  /** Session reference (for session cards) */
-  session_id?: SessionID;
-
-  /** Worktree reference (for worktree cards) */
-  worktree_id?: WorktreeID;
+  /** Worktree reference */
+  worktree_id: WorktreeID;
 
   /** Position on canvas */
   position: { x: number; y: number };

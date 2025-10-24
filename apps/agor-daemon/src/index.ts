@@ -1372,40 +1372,8 @@ async function main() {
     // biome-ignore lint/suspicious/noExplicitAny: Service type not compatible with Express
   } as any);
 
-  // Hook: Remove session from all boards when session is deleted
-  sessionsService.on('removed', async (session: import('@agor/core/types').Session) => {
-    try {
-      // Find all boards
-      const boardsResult = await boardsService.find();
-      // Note: FeathersJS Service.find() can return T | T[] | Paginated<Board> depending on query params
-      // We cast to the expected union type since we know we're querying for multiple results
-      type Board = import('@agor/core/types').Board;
-      const findResult = boardsResult as Board[] | Paginated<Board>;
-      const boards = isPaginated(findResult) ? findResult.data : findResult;
-
-      // Remove session from any boards (via board-objects service)
-      try {
-        const boardObjectsResult = await app.service('board-objects').find({
-          query: { session_id: session.session_id },
-        });
-
-        const boardObjects = isPaginated(boardObjectsResult)
-          ? boardObjectsResult.data
-          : boardObjectsResult;
-
-        for (const boardObject of boardObjects) {
-          await app.service('board-objects').remove(boardObject.object_id);
-          console.log(
-            `Removed session ${session.session_id} from board (object ${boardObject.object_id})`
-          );
-        }
-      } catch (error) {
-        console.error('Failed to remove session board objects:', error);
-      }
-    } catch (error) {
-      console.error('Failed to remove session from boards:', error);
-    }
-  });
+  // Note: Sessions are no longer directly on boards (worktree-only architecture).
+  // Sessions are accessed through worktree cards. No cleanup needed on session deletion.
 
   // Health check endpoint
   app.use('/health', {

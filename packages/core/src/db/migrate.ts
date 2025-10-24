@@ -343,18 +343,15 @@ async function createInitialSchema(db: Database): Promise<void> {
       CREATE INDEX IF NOT EXISTS session_mcp_servers_enabled_idx ON session_mcp_servers(session_id, enabled)
     `);
 
-    // Board Objects table - Positioned entities on boards (sessions or worktrees)
+    // Board Objects table - Positioned worktrees on boards
     await db.run(sql`
       CREATE TABLE IF NOT EXISTS board_objects (
         object_id TEXT PRIMARY KEY,
         board_id TEXT NOT NULL,
         created_at INTEGER NOT NULL,
-        object_type TEXT NOT NULL CHECK(object_type IN ('session', 'worktree')),
-        session_id TEXT,
-        worktree_id TEXT,
+        worktree_id TEXT NOT NULL,
         data TEXT NOT NULL,
         FOREIGN KEY (board_id) REFERENCES boards(board_id) ON DELETE CASCADE,
-        FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE,
         FOREIGN KEY (worktree_id) REFERENCES worktrees(worktree_id) ON DELETE CASCADE
       )
     `);
@@ -364,15 +361,7 @@ async function createInitialSchema(db: Database): Promise<void> {
     `);
 
     await db.run(sql`
-      CREATE INDEX IF NOT EXISTS board_objects_session_idx ON board_objects(session_id)
-    `);
-
-    await db.run(sql`
       CREATE INDEX IF NOT EXISTS board_objects_worktree_idx ON board_objects(worktree_id)
-    `);
-
-    await db.run(sql`
-      CREATE INDEX IF NOT EXISTS board_objects_type_idx ON board_objects(object_type)
     `);
   } catch (error) {
     throw new MigrationError(

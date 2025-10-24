@@ -482,12 +482,10 @@ export const mcpServers = sqliteTable(
 );
 
 /**
- * Board Objects table - Positioned entities on boards (sessions or worktrees)
+ * Board Objects table - Positioned worktrees on boards
  *
- * Phase 1: Hybrid board support - boards can display BOTH session cards and worktree cards.
- * This table tracks which entities (sessions or worktrees) are positioned on which boards.
- *
- * Replaces the old board.sessions[] + board.layout{} approach with a more flexible system.
+ * Tracks which worktrees are positioned on which boards.
+ * Sessions are accessed through the worktree card (session tree).
  */
 export const boardObjects = sqliteTable(
   'board_objects',
@@ -499,16 +497,12 @@ export const boardObjects = sqliteTable(
       .references(() => boards.board_id, { onDelete: 'cascade' }),
     created_at: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 
-    // Entity type and references
-    object_type: text('object_type', {
-      enum: ['session', 'worktree'],
-    }).notNull(),
-    session_id: text('session_id', { length: 36 }).references(() => sessions.session_id, {
-      onDelete: 'cascade',
-    }),
-    worktree_id: text('worktree_id', { length: 36 }).references(() => worktrees.worktree_id, {
-      onDelete: 'cascade',
-    }),
+    // Worktree reference
+    worktree_id: text('worktree_id', { length: 36 })
+      .notNull()
+      .references(() => worktrees.worktree_id, {
+        onDelete: 'cascade',
+      }),
 
     // Position data (JSON)
     data: text('data', { mode: 'json' })
@@ -519,9 +513,7 @@ export const boardObjects = sqliteTable(
   },
   table => ({
     boardIdx: index('board_objects_board_idx').on(table.board_id),
-    sessionIdx: index('board_objects_session_idx').on(table.session_id),
     worktreeIdx: index('board_objects_worktree_idx').on(table.worktree_id),
-    typeIdx: index('board_objects_type_idx').on(table.object_type),
   })
 );
 

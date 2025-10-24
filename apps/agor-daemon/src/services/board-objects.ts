@@ -6,22 +6,14 @@
  */
 
 import { BoardObjectRepository, type Database } from '@agor/core/db';
-import type {
-  BoardEntityObject,
-  BoardID,
-  QueryParams,
-  SessionID,
-  WorktreeID,
-} from '@agor/core/types';
+import type { BoardEntityObject, BoardID, QueryParams, WorktreeID } from '@agor/core/types';
 
 /**
  * Board object service params
  */
 export type BoardObjectParams = QueryParams<{
   board_id?: BoardID;
-  session_id?: SessionID;
   worktree_id?: WorktreeID;
-  object_type?: 'session' | 'worktree';
 }>;
 
 /**
@@ -36,26 +28,15 @@ export class BoardObjectsService {
   }
 
   /**
-   * Override create to validate entity references
+   * Create board object (add worktree to board)
    */
   async create(
     data: Partial<BoardEntityObject>,
     params?: BoardObjectParams
   ): Promise<BoardEntityObject> {
-    // Validate: exactly one of session_id or worktree_id must be set
-    if (!data.session_id && !data.worktree_id) {
-      throw new Error('Must specify session_id or worktree_id');
-    }
-    if (data.session_id && data.worktree_id) {
-      throw new Error('Cannot specify both session_id and worktree_id');
-    }
-
-    // Validate: object_type matches the provided ID
-    if (data.session_id && data.object_type !== 'session') {
-      throw new Error('object_type must be "session" when session_id is provided');
-    }
-    if (data.worktree_id && data.object_type !== 'worktree') {
-      throw new Error('object_type must be "worktree" when worktree_id is provided');
+    // Validate: worktree_id is provided
+    if (!data.worktree_id) {
+      throw new Error('worktree_id is required');
     }
 
     // Validate: position is provided
@@ -71,8 +52,6 @@ export class BoardObjectsService {
     // Use repository to create
     const boardObject = await this.boardObjectRepo.create({
       board_id: data.board_id,
-      object_type: data.object_type!,
-      session_id: data.session_id,
       worktree_id: data.worktree_id,
       position: data.position,
     });
@@ -163,16 +142,6 @@ export class BoardObjectsService {
     this.emit?.('patched', boardObject, params);
 
     return boardObject;
-  }
-
-  /**
-   * Custom method: Find by session ID
-   */
-  async findBySessionId(
-    sessionId: SessionID,
-    _params?: BoardObjectParams
-  ): Promise<BoardEntityObject | null> {
-    return this.boardObjectRepo.findBySessionId(sessionId);
   }
 
   /**
