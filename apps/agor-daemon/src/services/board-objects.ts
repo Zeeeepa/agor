@@ -80,12 +80,14 @@ export class BoardObjectsService {
       };
     }
 
-    // No board_id - return empty
+    // No board_id - return ALL board objects
+    const allObjects = await this.boardObjectRepo.findAll();
+
     return {
-      total: 0,
-      limit: 100,
-      skip: 0,
-      data: [],
+      total: allObjects.length,
+      limit: params?.query?.$limit || 100,
+      skip: params?.query?.$skip || 0,
+      data: allObjects,
     };
   }
 

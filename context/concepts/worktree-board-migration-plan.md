@@ -1,7 +1,7 @@
 # Worktree-Centric Board Migration Plan
 
-**Status:** Planning
-**Date:** 2025-10-23
+**Status:** Phase 0 & 1 Complete ✅
+**Date:** 2025-10-24
 **Context:** Shift from session-centric to worktree-centric boards
 
 **Related:**
@@ -42,21 +42,21 @@ Boards ←(one-to-many)→ Worktrees ←(one-to-many)→ Sessions
 
 ---
 
-## Phase 0: Data Model Changes
+## Phase 0: Data Model Changes ✅ COMPLETE
 
-### Add `board_id` to Worktrees
+### Add `board_id` to Worktrees ✅
 
-**Schema Update:**
+**Schema Update:** ✅ Implemented
 
 ```sql
--- Add board_id column (nullable)
+-- Added board_id column (nullable)
 ALTER TABLE worktrees ADD COLUMN board_id TEXT REFERENCES boards(board_id) ON DELETE SET NULL;
 
--- Add index for fast queries
+-- Added index for fast queries
 CREATE INDEX worktrees_board_idx ON worktrees(board_id);
 ```
 
-**Type Update:**
+**Type Update:** ✅ Implemented
 
 ```typescript
 // packages/core/src/types/worktree.ts
@@ -73,114 +73,88 @@ export interface Worktree {
 }
 ```
 
-**Migration Script:**
+**Implementation Notes:**
 
-```typescript
-// No migration needed initially - board_id starts as NULL for all worktrees
-// Users will manually move worktrees to boards via UI
-```
+- ✅ board_id added to Worktree type
+- ✅ board_id stored as top-level column in database (not in data JSON blob)
+- ✅ Repository layer reads and writes board_id correctly
+- ✅ Critical bug fixed: rowToWorktree() now includes board_id when reading from DB
+- ✅ Critical bug fixed: Use null instead of undefined for clearing (JSON serialization)
 
 ---
 
-## Phase 1: Hybrid Board Support (Dual-Card System)
+## Phase 1: Worktree-Centric Boards ✅ COMPLETE
 
-**Goal:** Support BOTH SessionCard and WorktreeCard on boards simultaneously
+**Goal:** Display worktrees as primary units on boards (simplified from original hybrid plan)
 
-**Why Hybrid?** Allows gradual migration without breaking existing boards
+**Implementation Decision:** Skip hybrid dual-card system, go directly to worktree-only boards
 
-**Note:** All sessions MUST have worktrees (fundamental constraint). The hybrid approach is about how we DISPLAY them on boards (as individual session cards vs grouped in worktree cards), not about sessions existing without worktrees.
+**Why?** Simpler architecture, clearer user mental model, all sessions already have worktrees
 
-### BoardObject Type Update
+**Note:** All sessions MUST have worktrees (fundamental constraint). We display sessions WITHIN worktree cards, not as separate canvas nodes.
+
+### BoardObject Type Update ✅ Implemented (Simplified)
 
 ```typescript
 // packages/core/src/types/board.ts
-export interface BoardObject {
+export interface BoardEntityObject {
   object_id: string;
   board_id: BoardID;
-
-  // NEW: Support both session and worktree references
-  object_type: 'session' | 'worktree';
-  session_id?: SessionID; // For session cards (legacy)
-  worktree_id?: WorktreeID; // For worktree cards (new)
-
+  worktree_id: WorktreeID; // Only worktrees on boards (no session cards)
   position: { x: number; y: number };
   created_at: string;
 }
 ```
 
-**Validation:** Exactly ONE of `session_id` or `worktree_id` must be set
+**Implementation Notes:**
+
+- ✅ Simplified from hybrid approach - only worktrees on boards
+- ✅ board_objects table stores worktree_id (required)
+- ✅ No object_type field needed (always worktree)
+- ✅ Sessions displayed within WorktreeCard, not as separate canvas nodes
 
 ---
 
-### UI Components
+### UI Components ✅ Implemented
 
-**1. Update BoardCanvas to support both card types:**
+**1. SessionCanvas (worktree-only):** ✅ Implemented
 
-```tsx
-// apps/agor-ui/src/components/boards/BoardCanvas.tsx
-
-function BoardCanvas() {
-  const { boardObjects } = useBoardObjects();
-
-  const nodes = boardObjects.map(obj => {
-    if (obj.object_type === 'session') {
-      return {
-        id: obj.session_id!,
-        type: 'sessionCard',
-        data: { sessionId: obj.session_id },
-        position: obj.position,
-      };
-    } else {
-      return {
-        id: obj.worktree_id!,
-        type: 'worktreeCard', // NEW node type
-        data: { worktreeId: obj.worktree_id },
-        position: obj.position,
-      };
-    }
-  });
-
-  return (
-    <ReactFlow nodes={nodes} nodeTypes={{ sessionCard: SessionCard, worktreeCard: WorktreeCard }} />
-  );
-}
-```
-
-**2. Create WorktreeCard component:**
-
-See `worktree-board-design.md` for full spec.
+Located: `apps/agor-ui/src/components/SessionCanvas/SessionCanvas.tsx`
 
 ```tsx
-// apps/agor-ui/src/components/boards/WorktreeCard.tsx
-
-export function WorktreeCard({ data }: { data: { worktreeId: WorktreeID } }) {
-  const worktree = useWorktree(data.worktreeId);
-  const sessions = useWorktreeSessions(data.worktreeId);
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <Card>
-      {/* Header */}
-      <div>🌿 {worktree.name} [edit] [···]</div>
-
-      {/* Pills */}
-      <div>
-        {worktree.issue_url && <Pill>#{extractIssueNumber(worktree.issue_url)}</Pill>}
-        {worktree.pull_request_url && <Pill>PR #{extractPRNumber(worktree.pull_request_url)}</Pill>}
-        {worktree.environment_instance && <Pill>🔧 {worktree.environment_instance.status}</Pill>}
-        <Pill>⟳ {sessions.filter(s => s.status === 'active').length} active</Pill>
-      </div>
-
-      {/* Collapsible Session Tree */}
-      <div onClick={() => setExpanded(!expanded)}>
-        {expanded ? '▾' : '▸'} Sessions ({sessions.length})
-      </div>
-
-      {expanded && <SessionTree sessions={sessions} onSessionClick={openSessionDrawer} />}
-    </Card>
-  );
-}
+// Simplified - only worktree nodes (no hybrid dual-card system)
+const initialNodes: Node[] = useMemo(() => {
+  return worktrees.map(worktree => ({
+    id: worktree.worktree_id,
+    type: 'worktreeNode',
+    data: {
+      worktree,
+      sessions: worktreeSessions,
+      tasks,
+      users,
+      // ... handlers
+    },
+    position: boardObject?.position || autoLayoutPosition,
+  }));
+}, [boardObjects, worktrees, sessions, tasks, users]);
 ```
+
+**2. WorktreeCard component:** ✅ Implemented
+
+Located: `apps/agor-ui/src/components/WorktreeCard/WorktreeCard.tsx`
+
+Features implemented:
+
+- ✅ Worktree header with name, ref, and metadata
+- ✅ Branch icon (BranchesOutlined)
+- ✅ Edit and delete buttons
+- ✅ Collapsible session list with expand/collapse
+- ✅ Session status indicators and badges
+- ✅ Click session to open SessionDrawer
+- ✅ Issue/PR links
+- ✅ Created by metadata with user avatars
+- ✅ Draggable via React Flow
+- ✅ Pinnable to zones (visual indicator)
 
 ---
 

@@ -87,23 +87,32 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
         remove: (id: string) => Promise<BoardEntityObject>;
       };
 
-      // First, check if a board_object already exists
-      const existingObject = await boardObjectsService.findByWorktreeId(id);
+      try {
+        // First, check if a board_object already exists
+        const existingObject = await boardObjectsService.findByWorktreeId(id);
 
-      if (existingObject) {
-        // Board object exists - delete it first
-        await boardObjectsService.remove(existingObject.object_id);
-        console.log(`🗑️  Removed existing board_object ${existingObject.object_id}`);
-      }
+        if (existingObject) {
+          // Board object exists - delete it first
+          await boardObjectsService.remove(existingObject.object_id, params);
+        }
 
-      // Now create new board_object if board_id is set
-      if (newBoardId) {
-        await boardObjectsService.create({
-          board_id: newBoardId,
-          worktree_id: id,
-          position: { x: 100, y: 100 }, // Default position
-        });
-        console.log(`✅ Created board_object for worktree ${id} on board ${newBoardId}`);
+        // Now create new board_object if board_id is set
+        if (newBoardId) {
+          await boardObjectsService.create(
+            {
+              board_id: newBoardId,
+              worktree_id: id,
+              position: { x: 100, y: 100 }, // Default position
+            },
+            params // Pass params to ensure WebSocket events are emitted
+          );
+        }
+      } catch (error) {
+        console.error(
+          `❌ Failed to manage board_objects for worktree ${id}:`,
+          error instanceof Error ? error.message : String(error)
+        );
+        // Don't throw - allow worktree patch to succeed even if board_object management fails
       }
     }
 

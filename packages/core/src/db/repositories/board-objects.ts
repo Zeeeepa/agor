@@ -19,6 +19,22 @@ export class BoardObjectRepository {
   constructor(private db: Database) {}
 
   /**
+   * Find all board objects
+   */
+  async findAll(): Promise<BoardEntityObject[]> {
+    try {
+      const rows = await this.db.select().from(boardObjects).all();
+
+      return rows.map(this.rowToEntity);
+    } catch (error) {
+      throw new RepositoryError(
+        `Failed to find all board objects: ${error instanceof Error ? error.message : String(error)}`,
+        error
+      );
+    }
+  }
+
+  /**
    * Find all board objects for a board
    */
   async findByBoardId(boardId: BoardID): Promise<BoardEntityObject[]> {
