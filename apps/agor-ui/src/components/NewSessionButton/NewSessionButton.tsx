@@ -11,7 +11,7 @@ export const NewSessionButton: React.FC<NewSessionButtonProps> = ({ onClick }) =
       icon={<PlusOutlined />}
       type="primary"
       onClick={onClick}
-      tooltip="Create new session"
+      tooltip="Create new worktree"
       style={{ right: 24, top: 80 }}
     />
   );

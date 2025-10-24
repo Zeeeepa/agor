@@ -11,7 +11,7 @@ import {
   LinkOutlined,
   PushpinFilled,
 } from '@ant-design/icons';
-import { App, Badge, Button, Card, Collapse, Space, Spin, Tag, Typography } from 'antd';
+import { App, Badge, Button, Card, Collapse, Space, Spin, Tag, Typography, theme } from 'antd';
 import { useState } from 'react';
 import { CreatedByTag } from '../metadata';
 import { ToolIcon } from '../ToolIcon';
@@ -52,6 +52,7 @@ const WorktreeCard = ({
   defaultExpanded = true,
 }: WorktreeCardProps) => {
   const { modal } = App.useApp();
+  const { token } = theme.useToken();
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
 
   const handleDelete = () => {
@@ -213,7 +214,7 @@ const WorktreeCard = ({
       >
         <Space size={8} align="center">
           <div className="drag-handle" style={{ display: 'flex', alignItems: 'center' }}>
-            <BranchesOutlined style={{ fontSize: 32, color: '#1890ff' }} />
+            <BranchesOutlined style={{ fontSize: 32, color: token.colorPrimary }} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <Typography.Text strong className="nodrag">

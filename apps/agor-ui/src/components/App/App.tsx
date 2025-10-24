@@ -37,6 +37,7 @@ import {
   NewSessionModal,
   type RepoReferenceOption,
 } from '../NewSessionModal';
+import { type NewWorktreeConfig, NewWorktreeModal } from '../NewWorktreeModal';
 import { SessionCanvas } from '../SessionCanvas';
 import SessionDrawer from '../SessionDrawer';
 import { SessionListDrawer } from '../SessionListDrawer';
@@ -144,6 +145,7 @@ export const App: React.FC<AppProps> = ({
   onLogout,
 }) => {
   const [modalOpen, setModalOpen] = useState(false);
+  const [newWorktreeModalOpen, setNewWorktreeModalOpen] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [listDrawerOpen, setListDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -156,6 +158,27 @@ export const App: React.FC<AppProps> = ({
     console.log('Creating session with config:', config, 'for board:', currentBoardId);
     onCreateSession?.(config, currentBoardId);
     setModalOpen(false);
+  };
+
+  const handleCreateWorktree = async (config: NewWorktreeConfig) => {
+    const worktree = await onCreateWorktree?.(config.repoId, {
+      name: config.name,
+      ref: config.ref,
+      createBranch: config.createBranch,
+      sourceBranch: config.sourceBranch,
+      pullLatest: config.pullLatest,
+      issue_url: config.issue_url,
+      pull_request_url: config.pull_request_url,
+    });
+
+    // If board_id is provided and worktree was created, assign it to the board
+    if (worktree && config.board_id) {
+      await onUpdateWorktree?.(worktree.worktree_id, {
+        board_id: config.board_id,
+      });
+    }
+
+    setNewWorktreeModalOpen(false);
   };
 
   const handleSessionClick = (sessionId: string) => {
@@ -317,7 +340,7 @@ export const App: React.FC<AppProps> = ({
           }}
           onDeleteWorktree={onDeleteWorktree}
         />
-        <NewSessionButton onClick={() => setModalOpen(true)} />
+        <NewSessionButton onClick={() => setNewWorktreeModalOpen(true)} />
       </Content>
       <NewSessionModal
         open={modalOpen}
@@ -423,6 +446,13 @@ export const App: React.FC<AppProps> = ({
         }}
       />
       <TerminalModal open={terminalOpen} onClose={() => setTerminalOpen(false)} client={client} />
+      <NewWorktreeModal
+        open={newWorktreeModalOpen}
+        onClose={() => setNewWorktreeModalOpen(false)}
+        onCreate={handleCreateWorktree}
+        repos={repos}
+        currentBoardId={currentBoardId}
+      />
     </Layout>
   );
 };
