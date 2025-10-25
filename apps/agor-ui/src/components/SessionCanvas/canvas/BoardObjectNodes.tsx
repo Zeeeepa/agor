@@ -399,12 +399,13 @@ export const ZoneNode = React.memo(ZoneNodeComponent);
 interface CommentNodeData {
   comment: BoardComment;
   replyCount: number;
+  user?: import('@agor/core/types').User;
   onClick?: (commentId: string) => void;
 }
 
 const CommentNodeComponent = ({ data }: { data: CommentNodeData }) => {
   const { token } = theme.useToken();
-  const { comment, replyCount, onClick } = data;
+  const { comment, replyCount, user, onClick } = data;
   const [isHovered, setIsHovered] = useState(false);
 
   // Show first line of content as preview
@@ -439,9 +440,10 @@ const CommentNodeComponent = ({ data }: { data: CommentNodeData }) => {
           justifyContent: 'center',
           transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
           transform: isHovered ? 'scale(1.1)' : 'scale(1)',
+          fontSize: '18px',
         }}
       >
-        <CommentOutlined style={{ fontSize: '16px', color: token.colorBgContainer }} />
+        {user?.emoji || '💬'}
         {totalCount > 1 && (
           <div
             style={{

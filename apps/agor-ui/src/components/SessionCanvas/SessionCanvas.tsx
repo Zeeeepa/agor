@@ -491,6 +491,9 @@ const SessionCanvas = ({
 
     for (const comment of spatialComments) {
       if (comment.position?.absolute) {
+        // Find user who created the comment
+        const user = users.find(u => u.user_id === comment.created_by);
+
         nodes.push({
           id: `comment-${comment.comment_id}`,
           type: 'comment',
@@ -500,6 +503,7 @@ const SessionCanvas = ({
           data: {
             comment,
             replyCount: replyCount.get(comment.comment_id) || 0,
+            user,
             onClick: (commentId: string) => {
               // TODO: Phase 2 - open comments panel and scroll to comment
               console.log('Clicked comment:', commentId);
@@ -510,7 +514,7 @@ const SessionCanvas = ({
     }
 
     return nodes;
-  }, [comments]);
+  }, [comments, users]);
 
   // Sync SESSION nodes only (don't trigger on zone changes)
   useEffect(() => {
