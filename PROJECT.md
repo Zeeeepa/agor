@@ -7,7 +7,6 @@ Simple todo list for launch preparation.
 ### Core Features
 
 - [ ] Troubleshoot Claude session edge cases (unclear/incomplete results)
-- [x] Session forking UI with genealogy visualization in WorktreeCard
 - [ ] Session spawning UI with genealogy visualization in WorktreeCard
 
 ### Documentation
@@ -16,6 +15,7 @@ Simple todo list for launch preparation.
 
 ### Distribution
 
+- [ ] Fix codespaces setup for Agor repo
 - [ ] Publish `@agor/core` to npm
 - [ ] Publish `@agor/daemon` to npm
 - [ ] Publish `@agor/cli` to npm
@@ -30,24 +30,15 @@ Simple todo list for launch preparation.
 ### UX Polish
 
 - [ ] Token count & cost tracking ($ per task/session)
-- [ ] Typing indicators in prompt input
 - [ ] Worktree CLI commands (`agor worktree list/create/delete`)
 - [ ] Terminal shortcut: Command palette shortcut to open terminal in worktree path (without opening WorktreeModal)
-
-### Advanced Features
-
-- [ ] Export session/task as markdown
-
----
 
 ## Consider for Launch
 
 - [ ] Write/Edit tool with file diffs and syntax highlighting
 - [ ] Concepts as first-class primitives (CRUD in UI/CLI)
 - [ ] Reports as first-class primitives (CRUD in UI/CLI)
-- [ ] bulk create worktrees based on a set of issue_url
 - [ ] `@`-triggered autocomplete for sessions/repos/concepts
-- [ ] annotations/comment/post-it notes social features
 
 ## Post-Launch (Future)
 

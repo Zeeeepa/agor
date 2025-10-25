@@ -1,69 +1,47 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with the Agor codebase.
+**Agor** — Multiplayer canvas for orchestrating Claude Code, Codex, and Gemini sessions.
 
-## Project Overview
+Manage git worktrees, track AI conversations, visualize work on spatial boards, and collaborate in real-time.
 
-**Agor** — Next-gen agent orchestration for AI-assisted development.
+---
 
-_The multiplayer, spatial layer that connects Claude Code, Codex, Gemini, and any agentic coding tool into one unified workspace._
+## IMPORTANT: Context-Driven Development
 
-A platform for **real-time, multiplayer agentic development**. Visualize, coordinate, and automate your AI workflows across tools. Agor turns every AI session into a composable, inspectable, and reusable building block.
+**This file is intentionally high-level.** Detailed documentation lives in `context/`.
 
-**Current Status:** Phase 2 Complete - Multiplayer foundation with real-time collaboration, zones, and MCP support
+**When working on a task, you are EXPECTED to:**
 
-**For full vision and core primitives, see `context/concepts/core.md`**
+1. Read the relevant `context/` docs based on your task (see index below)
+2. Fetch on-demand rather than trying to hold everything in context
+3. Start with `context/README.md` if unsure where to look
 
-## Architecture Documentation
+**The `context/` folder is the source of truth.** Use CLAUDE.md as a map, not a manual.
 
-All architectural documentation lives in `context/`. **Start with `context/README.md`** for a complete index of all available concepts and explorations.
+---
 
-### Essential Reading (Start Here)
+## Quick Start
 
-Before making changes, read these core concepts:
+**Simplified 2-process workflow:**
 
-- **`context/concepts/core.md`** - Vision, five primitives (Session, Task, Report, Worktree, Concept), and what makes Agor different
-- **`context/concepts/models.md`** - Canonical data model definitions and relationships
-- **`context/concepts/architecture.md`** - System design, storage structure, and component interactions
+```bash
+# Terminal 1: Daemon (watches core + daemon, auto-restarts)
+cd apps/agor-daemon
+pnpm dev
 
-### By Domain
+# Terminal 2: UI dev server
+cd apps/agor-ui
+pnpm dev
+```
 
-**Identity & Data:**
+**IMPORTANT FOR AGENTS:**
 
-- `id-management.md` - UUIDv7 implementation, short IDs, and branded types
-- `models.md` - Canonical data models and relationships
+- User runs dev environment in watch mode (daemon + UI)
+- **DO NOT run `pnpm build`** or compilation commands unless explicitly asked
+- **DO NOT start background processes** - user manages these
+- Focus on code edits; watch mode handles recompilation automatically
 
-**UI/UX & Frontend:**
-
-- `design.md` - UI/UX standards and component patterns
-- `frontend-guidelines.md` - React/Ant Design patterns, token-based styling, WebSocket integration
-- `conversation-ui.md` - Task-centric conversation UI, universal message schema
-- `tool-blocks.md` - Advanced tool visualization, semantic grouping, file impact graphs
-- `multiplayer.md` - Real-time collaboration, facepile, cursor swarm, presence indicators
-- `board-objects.md` - Board layout system, zones, session pinning
-
-**Backend & Integration:**
-
-- `architecture.md` - System design, storage structure, data flow
-- `websockets.md` - Real-time communication with FeathersJS/Socket.io
-- `auth.md` - Authentication & authorization, anonymous-first, JWT/Local strategies
-- `agent-integration.md` - Claude Agent SDK integration, session continuity, live execution
-- `mcp-integration.md` - MCP server management, CRUD UI/CLI, session-level selection
-
-**AI & Enrichment:**
-
-- `llm-enrichment.md` - AI-powered session analysis, summaries, pattern detection, quality insights
-
-### Explorations (WIP/Future)
-
-Experimental designs in `context/explorations/` - read these for future features:
-
-- `worktree-ux-design.md` - Git worktree UI/UX design
-- `subtask-orchestration.md` - Multi-agent task coordination
-- `async-jobs.md` - Background job processing and queuing
-- `single-package.md` - Distribution strategy (bundled CLI + daemon + UI)
-- `docs-website.md` - Documentation website with Nextra
-- `native-cli-feature-gaps.md` - Feature comparison between native CLIs and SDKs
+---
 
 ## Project Structure
 
@@ -71,412 +49,187 @@ Experimental designs in `context/explorations/` - read these for future features
 agor/
 ├── apps/
 │   ├── agor-daemon/         # FeathersJS backend (REST + WebSocket)
-│   │   └── src/
-│   │       ├── services/    # Sessions, Tasks, Messages, Repos, Boards
-│   │       └── index.ts     # Main daemon entry point
-│   │
 │   ├── agor-cli/            # CLI tool (oclif-based)
-│   │   └── src/commands/    # session/, repo/, board/ commands
-│   │
-│   └── agor-ui/             # React UI prototype (Storybook-first)
-│       └── src/             # Components, types, mocks
+│   └── agor-ui/             # React UI (Ant Design + React Flow)
 │
 ├── packages/
 │   └── core/                # Shared @agor/core package
-│       └── src/
-│           ├── types/       # TypeScript types (Session, Task, Message, etc.)
-│           ├── db/          # Drizzle ORM + repositories + schema
-│           ├── git/         # Git utils (clone, worktree management)
-│           ├── claude/      # Claude Code session loading utilities
-│           └── api/         # FeathersJS client utilities
+│       ├── types/           # TypeScript types (Session, Task, Worktree, etc.)
+│       ├── db/              # Drizzle ORM + repositories + schema
+│       ├── git/             # Git utils (simple-git only, no subprocess)
+│       ├── claude/          # Claude Code session loading utilities
+│       └── api/             # FeathersJS client utilities
 │
-├── context/                 # Architecture documentation
-│   ├── concepts/            # Core design docs (READ THESE FIRST)
+├── context/                 # 📚 Architecture documentation (READ THIS!)
+│   ├── concepts/            # Core design docs
 │   └── explorations/        # Experimental designs
 │
 ├── README.md               # Product vision and overview
-└── PROJECT.md              # Implementation roadmap and status
+└── PROJECT.md              # Launch checklist
 ```
 
-## Tech Stack
-
-### Backend (Current Focus)
-
-- **FeathersJS** - REST + WebSocket API framework
-- **Drizzle ORM** - Type-safe database layer
-- **LibSQL** - SQLite-compatible database (local file + future cloud sync)
-- **simple-git** - Git operations for repo/worktree management
-
-### Frontend (UI Prototype)
-
-- **React 18 + TypeScript + Vite**
-- **Ant Design** - Component library (dark mode default, strict token usage)
-- **Storybook** - Component development
-- **React Flow** - Session tree canvas visualization
-
-### CLI
-
-- **oclif** - CLI framework
-- **chalk** - Terminal colors and formatting
-- **cli-table3** - Table rendering
-
-## Development Commands
-
-**Simplified 2-process workflow:**
-
-```bash
-# Terminal 1: Run daemon (watches & rebuilds core, then restarts daemon on changes)
-cd apps/agor-daemon
-pnpm dev
-
-# Terminal 2: Run UI dev server
-cd apps/agor-ui
-pnpm dev
-```
-
-The daemon's `pnpm dev` uses `concurrently` to run:
-
-1. Core package watcher (`tsup --watch`) - rebuilds when core source changes
-2. Daemon watcher (`tsx watch`) - restarts when daemon source OR core dist changes
-
-This gives you a true 2-process workflow where editing core files automatically rebuilds and restarts the daemon!
-
-**IMPORTANT FOR CLAUDE CODE:**
-
-- The user is running the development environment in watch mode (daemon + UI)
-- **DO NOT run `pnpm build` or compilation commands unless explicitly asked**
-- **DO NOT start background processes** - the user manages these
-- Only run builds if you see compilation errors or if the user specifically requests it
-- Focus on code edits; the watch mode will handle recompilation automatically
-
-### Daemon
-
-```bash
-cd apps/agor-daemon
-pnpm dev                    # Start daemon on :3030
-curl http://localhost:3030/health  # Check health
-```
-
-### CLI
-
-```bash
-# Run commands from project root using workspace flag
-pnpm -w agor session list              # List sessions
-pnpm -w agor session load-claude <id>  # Load Claude Code session
-pnpm -w agor repo add <url>            # Clone and register repo
-pnpm -w agor repo list                 # List repos
-
-# Or use the filter flag directly
-pnpm --filter @agor/cli exec tsx bin/dev.ts session list
-```
-
-### UI
-
-```bash
-cd apps/agor-ui
-pnpm storybook              # Start Storybook on :6006
-pnpm dev                    # Start Vite dev server
-pnpm typecheck              # TypeScript checking
-pnpm test                   # Vitest tests
-```
-
-### Database
-
-```bash
-# Initialize database schema
-cd packages/core
-pnpm exec tsx src/db/scripts/setup-db.ts
-
-# Default location: ~/.agor/agor.db
-# Inspect with: sqlite3 ~/.agor/agor.db
-```
-
-## Configuration
-
-Agor uses `~/.agor/config.yaml` for persistent configuration.
-
-### Port Configuration
-
-```yaml
-# ~/.agor/config.yaml
-daemon:
-  port: 3030 # Daemon port (default: 3030)
-  host: localhost # Daemon host (default: localhost)
-
-ui:
-  port: 5173 # UI dev server port (default: 5173)
-  host: localhost # UI host (default: localhost)
-```
-
-**Environment Variable Overrides:**
-
-- `PORT` - Overrides daemon port
-- `VITE_DAEMON_URL` - Full daemon URL for UI (e.g., `http://localhost:3030`)
-- `VITE_DAEMON_PORT` - Daemon port for UI (alternative to full URL)
-- `VITE_DAEMON_HOST` - Daemon host for UI
-
-**Usage:**
-
-```bash
-# Set daemon port via config
-pnpm agor config set daemon.port 4000
-
-# Set UI port via config
-pnpm agor config set ui.port 5174
-
-# Or use environment variables
-PORT=4000 pnpm daemon:dev
-VITE_DAEMON_PORT=4000 pnpm ui:dev
-```
+---
 
 ## Core Primitives
 
-See `context/concepts/core.md` for full details.
+Agor is built on 5 primitives:
 
-1. **Session** - Container for agent interactions with genealogy (fork/spawn), git state, concepts, tasks
-2. **Task** - User prompts as first-class work units tracking git state, tool usage, message ranges
-3. **Message** - Conversation messages stored in database with session/task references
-4. **Worktree** - Git worktrees for session isolation (managed by Agor)
-5. **Concept** - Modular context files that compose into session-specific knowledge
+1. **Session** - Container for agent conversations with genealogy (fork/spawn)
+2. **Task** - User prompts as first-class work units
+3. **Worktree** - Git worktrees with isolated environments (PRIMARY UNIT ON BOARDS)
+4. **Report** - Markdown summaries generated after task completion
+5. **Concept** - Modular context files (like this one!)
 
-## Data Models
+**For details:** Read `context/concepts/core.md`
 
-See `context/concepts/models.md` for canonical definitions.
+---
 
-**Key Types** (in `packages/core/src/types/`):
+## Context Documentation Index
 
-- `Session` - session_id, agent, status, repo, git_state, genealogy, concepts, tasks
-- `Task` - task_id, session_id, status, description, message_range, git_state
-- `Message` - message_id, session_id, task_id, type, role, content, tool_uses
-- `Repo` - repo_id, slug, remote_url, local_path, worktrees
-- `Board` - board_id, name, sessions (organize sessions like Trello)
+### Start Here (Essential Reading)
 
-**ID Management** (see `context/concepts/id-management.md`):
+**Before making ANY changes, read these:**
 
-- UUIDv7 for time-ordered unique IDs
-- Branded types for type safety: `SessionID`, `TaskID`, `MessageID`, etc.
-- Short ID display format: `0199b856` (first 8 chars)
-- Full resolution in repositories via fuzzy matching
+- **`context/README.md`** - Complete index of all context docs
+- **`context/concepts/core.md`** - Vision, 5 primitives, core insights
+- **`context/concepts/models.md`** - Canonical data models
+- **`context/concepts/architecture.md`** - System design, storage, data flow
 
-## Database Schema
+### By Task Type
 
-See `context/concepts/architecture.md` for full schema.
+**Adding a UI feature?**
 
-**Tables** (SQLite via LibSQL + Drizzle):
+- `design.md` - UI/UX standards and patterns
+- `frontend-guidelines.md` - React/Ant Design, tokens, WebSocket hooks
+- `conversation-ui.md` - Task-centric conversation patterns (if relevant)
 
-- `sessions` - Session records with materialized columns + JSON data blob
-- `tasks` - Task records linked to sessions
-- `messages` - Conversation messages (indexed by session_id, task_id, index)
-- `repos` - Git repositories registered with Agor
-- `boards` - Session organization boards with position layout
-- `users` - User accounts with authentication
-- `mcp_servers` - MCP server configurations
+**Working with boards/canvas?**
 
-**Hybrid Storage Strategy:**
+- `board-objects.md` - Board layout, zones, zone triggers
+- `worktrees.md` - ⭐ **Worktree-centric architecture (CRITICAL)**
+- `social-features.md` - Spatial comments, presence, cursors
 
-- Materialized columns for filtering/joins (status, agent, timestamps)
-- JSON blobs for nested data (genealogy, git_state, metadata)
-- B-tree indexes on frequently queried fields
+**Adding a backend service?**
 
-## FeathersJS Services
+- `architecture.md` - System design, service patterns
+- `websockets.md` - Real-time broadcasting with FeathersJS
+- `auth.md` - Authentication and user attribution
 
-Located in `apps/agor-daemon/src/services/`:
+**Integrating an agent/SDK?**
 
-**Core Services:**
+- `agent-integration.md` - Claude Agent SDK integration
+- `agentic-coding-tool-integrations.md` - SDK feature comparison matrix
+- `permissions.md` - Permission system for tool approval
 
-- `/sessions` - CRUD + fork/spawn/genealogy custom methods
-- `/tasks` - CRUD + complete/fail custom methods
-- `/messages` - CRUD + `/messages/bulk` for batch inserts
-- `/repos` - CRUD + `/repos/clone` and worktree management
-- `/boards` - CRUD + session association + position layout
-- `/users` - User authentication and management
-- `/mcp-servers` - MCP server configuration and capabilities
-- `/authentication` - JWT-based auth with local/anonymous strategies
+**Working with git/worktrees?**
 
-**Custom Routes:**
+- `worktrees.md` - ⭐ **Worktree data model, boards, environments**
+- Use `simple-git` library (NEVER subprocess calls)
 
-- `POST /sessions/:id/fork` - Fork session at decision point
-- `POST /sessions/:id/spawn` - Spawn child session
-- `GET /sessions/:id/genealogy` - Get full genealogy tree
-- `POST /repos/clone` - Clone and register repository
-- `POST /repos/:id/worktrees` - Create git worktree
-- `POST /messages/bulk` - Bulk insert messages (batched for performance)
-- `POST /tasks/bulk` - Bulk insert tasks (batched for performance)
-- `POST /tasks/:id/complete` - Mark task as completed with optional report
-- `POST /tasks/:id/fail` - Mark task as failed with error message
+**Adding real-time features?**
 
-## CLI Commands
+- `websockets.md` - Socket.io broadcasting patterns
+- `multiplayer.md` - Presence, cursors, facepile
+- `social-features.md` - Comments, reactions, collaboration
 
-See `apps/agor-cli/src/commands/` for implementations.
+**Working with types?**
 
-**Session Commands:**
+- `ts-types.md` - TypeScript type catalog
+- `id-management.md` - UUIDv7, branded types, short IDs
 
-- `session list` - List all sessions in table format
-- `session show <id>` - Show session details
-- `session load-claude <id>` - Import Claude Code session from transcript
-  - Parses JSONL transcript from `~/.claude/projects/`
-  - Bulk inserts messages (batched at 100)
-  - Extracts tasks from user messages (batched at 100)
-  - Updates session with task IDs
-  - Optional `--board` flag to add to board
+**Configuring MCP servers?**
 
-**Repo Commands:**
+- `mcp-integration.md` - MCP server management, session-level selection
 
-- `repo list` - List registered repositories
-- `repo add <url>` - Clone and register git repository
+### By Domain
 
-**User Commands:**
+**Identity & Data:**
 
-- `user list` - List all users
-- `user create` - Create new user account
+- `id-management.md` - UUIDv7, short IDs, collision resolution
+- `models.md` - Data models and relationships
+- `ts-types.md` - TypeScript type reference
 
-**Board Commands:**
+**UI/UX & Frontend:**
 
-- `board list` - List all boards
-- `board add-session` - Add session to board
+- `design.md` - UI/UX principles
+- `frontend-guidelines.md` - React patterns, Ant Design tokens
+- `conversation-ui.md` - Task-centric conversation UI
+- `tool-blocks.md` - Tool visualization, file impact graphs
+- `social-features.md` - Spatial comments, presence, cursors
+- `multiplayer.md` - Real-time collaboration primitives
+- `board-objects.md` - Board layout, zones, triggers
 
-**Config Commands:**
+**Backend & Integration:**
 
-- `config` - Show all configuration
-- `config get <key>` - Get specific config value
-- `config set <key> <value>` - Set config value
+- `architecture.md` - System design, storage structure
+- `websockets.md` - Real-time communication
+- `auth.md` - Authentication, anonymous-first design
+- `agent-integration.md` - Claude/Codex/Gemini SDK integration
+- `agentic-coding-tool-integrations.md` - SDK feature comparison
+- `mcp-integration.md` - MCP server management
+- `permissions.md` - Permission system architecture
+- `worktrees.md` - ⭐ **Worktree-centric architecture**
 
-**Important CLI Patterns:**
+**Explorations (WIP/Future):**
 
-- Always use socket cleanup: `await new Promise<void>((resolve) => { client.io.on('disconnect', resolve); client.io.close(); setTimeout(resolve, 1000); }); process.exit(0);`
-- No stacktraces on errors: Use `this.log(chalk.red('✗ Error'))` + `process.exit(1)` instead of `this.error()`
-- Show progress for long operations (e.g., batched message inserts)
+- `subtask-orchestration.md` - Multi-agent coordination
+- `async-jobs.md` - Background job processing
+- `single-package.md` - Distribution strategy
+- `docs-website.md` - Documentation site with Nextra
 
-## Git Integration
+---
 
-See `context/concepts/architecture.md` for git workflows.
-
-**Git Library: simple-git**
-
-- ✅ **Always use simple-git** for all git operations (clone, worktree, branch, fetch, etc.)
-- ❌ **Never use direct subprocess calls** (`execSync`, `spawn`, etc.) for git commands
-- Location: `packages/core/src/git/index.ts` (git utility functions)
-
-**Repository Management:**
-
-- Clone to `~/.agor/repos/<name>`
-- Track in database with metadata (default_branch, remote_url, etc.)
-
-**Worktree Isolation:**
-
-- Create worktrees in `~/.agor/worktrees/<repo>/<worktree-name>`
-- Each session gets isolated working directory
-- Enables parallel work across multiple sessions/agents
-
-**Git State Tracking:**
-
-```typescript
-git_state: {
-  ref: string; // Branch/tag name
-  base_sha: string; // Starting commit
-  current_sha: string; // Current commit (can be "{sha}-dirty")
-}
-```
-
-**Common Operations:**
-
-```typescript
-import { simpleGit } from 'simple-git';
-
-const git = simpleGit('/path/to/repo');
-
-// Clone
-await git.clone(url, targetPath);
-
-// Worktrees
-await git.raw(['worktree', 'add', path, '-b', branch, source]);
-await git.raw(['worktree', 'list', '--porcelain']);
-
-// Branches
-const branches = await git.branch(['-r']); // Remote branches
-await git.fetch(['origin', 'main']);
-```
-
-## Message Storage
-
-See implementation in `packages/core/src/db/repositories/messages.ts`.
-
-**Message Table:**
-
-- Stores full conversation history from agent sessions
-- Indexed by session_id, task_id, and (session_id, index)
-- Content stored in JSON blob with preview field for display
-- Supports bulk inserts (batched at 100 messages for performance)
-
-**Message Types:**
-
-- `user` - User input messages
-- `assistant` - Agent responses
-- `system` - System messages
-- `file-history-snapshot` - File state snapshots
-
-**Loading Claude Code Sessions:**
-
-- Parse JSONL transcript from `~/.claude/projects/`
-- Filter to conversation messages (exclude meta/snapshots)
-- Convert to Agor message format
-- Bulk insert in batches to avoid timeout
-
-## Task Extraction
-
-See implementation in `packages/core/src/claude/task-extractor.ts`.
-
-**Architecture:**
-
-- **Messages** = Immutable append-only event log
-- **Tasks** = Mutable state containers tracking conversation turns
-
-**Extraction Logic:**
-
-- Each user message defines a task boundary
-- Message range spans from user message to next user message (or end)
-- Tasks are extracted with:
-  - `full_prompt` - Complete user input
-  - `description` - First 120 chars for display
-  - `message_range` - start_index, end_index, timestamps
-  - `tool_use_count` - Aggregated from all messages in range
-  - `status: 'completed'` - Historical sessions are always complete
-  - `git_state.sha_at_start: 'unknown'` - No git tracking in Claude Code transcripts
-
-**Bulk Operations:**
-
-- `/tasks/bulk` endpoint for efficient batch creation
-- Batched at 100 tasks per request
-- Returns created task records for session linking
-
-## Development Workflow
-
-### Adding New Features
-
-1. **Read architecture docs first** - `context/concepts/architecture.md`
-2. **Check data models** - `context/concepts/models.md`
-3. **Update types** - `packages/core/src/types/`
-4. **Add repository layer** - `packages/core/src/db/repositories/`
-5. **Create service** - `apps/agor-daemon/src/services/`
-6. **Register in daemon** - `apps/agor-daemon/src/index.ts`
-7. **Add CLI command** - `apps/agor-cli/src/commands/`
+## Development Patterns
 
 ### Code Standards
 
-- **Type-driven:** Use branded types for IDs, strict TypeScript
-- **Centralize and reuse types:** ALWAYS import and reuse existing types from `packages/core/src/types/` instead of redefining them. All canonical types are located in the core package:
-  - `packages/core/src/types/session.ts` - Session, SessionStatus, etc.
-  - `packages/core/src/types/task.ts` - Task, TaskStatus, etc.
-  - `packages/core/src/types/worktree.ts` - Worktree, WorktreeEnvironmentInstance, etc.
-  - `packages/core/src/types/repo.ts` - Repo, RepoEnvironmentConfig, etc.
-  - `packages/core/src/types/id.ts` - Branded ID types (SessionID, WorktreeID, etc.)
-  - `packages/core/src/types/message.ts` - Message, MessageType, etc.
-  - `packages/core/src/types/board.ts` - Board, BoardObject, etc.
-- **Read before edit:** Always read files before modifying
-- **Prefer Edit over Write:** Modify existing files when possible
-- **Error handling:** Clean user-facing errors, no stacktraces in CLI
-- **Socket cleanup:** Always close FeathersJS client sockets properly
-- **Batch operations:** Use batching for bulk database operations (100-500 items)
+1. **Type-driven** - Use branded types for IDs, strict TypeScript
+2. **Centralize types** - ALWAYS import from `packages/core/src/types/` (never redefine)
+3. **Read before edit** - Always read files before modifying
+4. **Prefer Edit over Write** - Modify existing files when possible
+5. **Git operations** - ALWAYS use `simple-git` (NEVER subprocess `execSync`, `spawn`, etc.)
+6. **Error handling** - Clean user-facing errors, no stacktraces in CLI
+
+### Important Rules
+
+**Git Library:**
+
+- ✅ Use `simple-git` for ALL git operations
+- ❌ NEVER use `execSync`, `spawn`, or bash for git commands
+- Location: `packages/core/src/git/index.ts`
+
+**Watch Mode:**
+
+- User runs `pnpm dev` in daemon (watches core + daemon)
+- **DO NOT** run builds unless explicitly asked or you see compilation errors
+- **DO NOT** start background processes
+
+**Type Reuse:**
+
+- Import types from `packages/core/src/types/`
+- Sessions, Tasks, Worktrees, Messages, Repos, Boards, Users, etc.
+- Never redefine canonical types
+
+**Worktree-Centric Architecture:**
+
+- Boards display **Worktrees** as primary cards (NOT Sessions)
+- Sessions reference worktrees via required FK
+- Read `context/concepts/worktrees.md` before touching boards
+
+---
+
+## Common Tasks
+
+### Adding a New Feature
+
+1. Read relevant `context/` docs first (see index above)
+2. Check `context/concepts/models.md` for data models
+3. Update types in `packages/core/src/types/`
+4. Add repository layer in `packages/core/src/db/repositories/`
+5. Create service in `apps/agor-daemon/src/services/`
+6. Register in `apps/agor-daemon/src/index.ts`
+7. Add CLI command in `apps/agor-cli/src/commands/` (if needed)
+8. Add UI component in `apps/agor-ui/src/components/` (if needed)
 
 ### Testing
 
@@ -487,98 +240,112 @@ sqlite3 ~/.agor/agor.db "SELECT COUNT(*) FROM messages"
 # Daemon health
 curl http://localhost:3030/health
 
-# CLI commands (always exit cleanly, no hanging)
-pnpm agor session list
-pnpm agor repo list
+# CLI commands (ensure clean exit, no hanging)
+pnpm -w agor session list
+pnpm -w agor repo list
 ```
 
-## Implementation Status
+---
 
-**✅ Phase 2 Complete (Multi-User Foundation + Multiplayer + Core Features):**
+## Tech Stack
 
-- Database schema with all tables (sessions, tasks, messages, repos, boards, users, mcp_servers, board_objects)
-- FeathersJS daemon with REST + WebSocket broadcasting
-- User authentication (email/password + JWT) with anonymous mode
-- Real-time position sync for multi-user boards
-- **Multiplayer collaboration:**
-  - Facepile component showing active users
-  - Real-time cursor broadcasting and rendering (100ms throttle)
-  - Presence indicators with stale cursor cleanup
-  - Remote cursors visible in canvas and minimap
-- **Zone triggers:** ✅
-  - Create, resize, color, and configure zones on canvas
-  - Pin/unpin sessions to zones
-  - Drop sessions on zones to trigger templated prompts
-  - Visual organization with kanban-style workflows
-- **MCP integration:** ✅
-  - MCP server configuration UI in settings modal
-  - Session-level MCP server selection
-  - Database schema and CRUD operations
-  - Hooked into Claude Agent SDK
-- **Git worktree management:** ✅
-  - Worktree creation and tracking
-  - Visual worktree labels in session headers
-  - Isolated git workspaces per session
-- Claude Agent SDK integration with CLAUDE.md auto-loading
-- OpenAI Codex SDK integration (beta, with permission system)
-- React Flow canvas with drag-and-drop sessions and zones
-- User management UI with emoji avatars
-- SessionDrawer with conversation view and task preview
-- CLI with full CRUD operations (sessions, repos, boards, users, config)
-- Git operations via simple-git (clone, worktree management)
-- UUIDv7 IDs with short ID display
+**Backend:**
 
-**🔄 Phase 3 Next Steps:**
+- FeathersJS - REST + WebSocket API
+- Drizzle ORM - Type-safe database layer
+- LibSQL - SQLite-compatible database
+- simple-git - Git operations
 
-- Gemini SDK integration (in progress)
-- Session forking UI and genealogy visualization
-- Concept management and report generation
-- Enhanced Codex permission modes (untrusted, on-request, on-failure, never)
-- Automated report generation after task completion
+**Frontend:**
 
-See `PROJECT.md` for detailed roadmap.
+- React 18 + TypeScript + Vite
+- Ant Design - Component library (dark mode, token-based styling)
+- React Flow - Canvas visualization
+- Storybook - Component development
+
+**CLI:**
+
+- oclif - CLI framework
+- chalk - Terminal colors
+
+---
+
+## Configuration
+
+Agor uses `~/.agor/config.yaml` for persistent configuration.
+
+```bash
+# Set daemon port
+pnpm agor config set daemon.port 4000
+
+# Set UI port
+pnpm agor config set ui.port 5174
+```
+
+**Environment Variables:**
+
+- `PORT` - Daemon port override
+- `VITE_DAEMON_URL` - Full daemon URL for UI
+- `VITE_DAEMON_PORT` - Daemon port for UI
+
+---
 
 ## Troubleshooting
 
-### "Method is not a function" errors after editing @agor/core
+### "Method is not a function" after editing @agor/core
 
-**Symptom:** After editing files in `packages/core/src/`, the daemon throws errors like `this.repository.findAll is not a function`.
-
-**Root Cause:** This should NOT happen anymore with the new 2-process workflow. The daemon now watches `packages/core/src` directly and auto-restarts when you edit core files.
+**Should NOT happen** with new 2-process workflow (daemon watches core and auto-restarts).
 
 **If it still happens:**
 
-1. Check that you're running the latest daemon dev script (should watch `../../packages/core/src`)
-2. Manually rebuild core: `cd packages/core && pnpm build`
-3. Restart the daemon: `cd apps/agor-daemon && pnpm dev`
+```bash
+cd packages/core && pnpm build
+cd apps/agor-daemon && pnpm dev
+```
 
-### tsx watch mode not picking up changes
-
-**Symptom:** tsx watch mode doesn't restart after making changes.
-
-**Solution:** Clear tsx cache and restart:
+### tsx watch not picking up changes
 
 ```bash
 cd apps/agor-daemon
 rm -rf node_modules/.tsx
-# Kill daemon and restart with pnpm dev
+# Restart daemon
 ```
 
-### Daemon hanging or not responding
-
-**Solution:** Kill all node/tsx processes and restart:
+### Daemon hanging
 
 ```bash
 lsof -ti:3030 | xargs kill -9
-cd apps/agor-daemon
-pnpm dev
+cd apps/agor-daemon && pnpm dev
 ```
 
-## Philosophy
+---
 
-- **Architecture-first:** Document decisions in `context/concepts/` before implementing
-- **Type safety:** Branded types, strict TypeScript, runtime validation
-- **Local-first:** SQLite-based, works offline, optional cloud sync
-- **Agent-agnostic:** Abstract interface for Claude Code, Cursor, Codex, Gemini
-- **Git-native:** Worktrees for isolation, commit tracking, reproducibility
-- **Modular context:** Concepts compose into session-specific knowledge bases
+## Key Files
+
+**Configuration:**
+
+- `~/.agor/config.yaml` - User configuration
+- `~/.agor/agor.db` - SQLite database
+
+**Important Paths:**
+
+- `packages/core/src/types/` - Canonical type definitions
+- `packages/core/src/db/schema.ts` - Database schema
+- `apps/agor-daemon/src/services/` - FeathersJS services
+- `context/concepts/` - Architecture documentation
+
+---
+
+## Remember
+
+📚 **Context docs are the source of truth** - fetch on-demand based on your task
+🔍 **Start with `context/README.md`** - complete index of all concepts
+⚠️ **Read `worktrees.md` before touching boards** - fundamental architecture shift
+🚫 **Never use subprocess for git** - always use `simple-git`
+✨ **Watch mode is running** - don't build unless explicitly asked
+
+---
+
+_For product vision: see `README.md`_
+_For launch checklist: see `PROJECT.md`_
+_For architecture deep-dive: see `context/`_
