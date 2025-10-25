@@ -457,9 +457,9 @@ const CommentNodeComponent = ({ data }: { data: CommentNodeData }) => {
             width: `${PIN_CIRCULAR_SIZE}px`,
             height: `${PIN_CIRCULAR_SIZE}px`,
             borderRadius: '50% 50% 50% 0',
-            // Layered background: subtle backdrop + color overlay
+            // Layered background: subtle backdrop + color overlay at 20%
             background: `
-              linear-gradient(${pinColor}cc, ${pinColor}cc),
+              linear-gradient(${pinColor}33, ${pinColor}33),
               ${token.colorBgLayout}33
             `,
             border: `2px solid ${token.colorBgContainer}`,
