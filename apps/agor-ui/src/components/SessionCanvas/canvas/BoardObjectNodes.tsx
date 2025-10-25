@@ -451,13 +451,17 @@ const CommentNodeComponent = ({ data }: { data: CommentNodeData }) => {
           justifyContent: 'center',
         }}
       >
-        {/* Circular top part */}
+        {/* Circular top part with backdrop */}
         <div
           style={{
             width: `${PIN_CIRCULAR_SIZE}px`,
             height: `${PIN_CIRCULAR_SIZE}px`,
             borderRadius: '50% 50% 50% 0',
-            background: pinColor,
+            // Layered background: subtle backdrop + color overlay
+            background: `
+              linear-gradient(${pinColor}cc, ${pinColor}cc),
+              ${token.colorBgLayout}33
+            `,
             border: `2px solid ${token.colorBgContainer}`,
             boxShadow: isHovered ? token.boxShadow : token.boxShadowSecondary,
             display: 'flex',
