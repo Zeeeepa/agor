@@ -1,4 +1,5 @@
 import type { Message, PermissionMode, Session, Task } from '@agor/core/types';
+import { sql } from 'drizzle-orm';
 import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 /**
@@ -606,7 +607,7 @@ export const boardComments = sqliteTable(
     reactions: text('reactions', { mode: 'json' })
       .$type<Array<{ user_id: string; emoji: string }>>()
       .notNull()
-      .default('[]'),
+      .default(sql`'[]'`),
 
     // JSON blob for advanced features
     data: text('data', { mode: 'json' })

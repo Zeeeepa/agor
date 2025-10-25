@@ -93,7 +93,7 @@ export class BoardCommentsRepository
       parent_comment_id: comment.parent_comment_id ?? null,
       resolved: comment.resolved ?? false,
       edited: comment.edited ?? false,
-      reactions: JSON.stringify(comment.reactions ?? []),
+      reactions: comment.reactions ?? [],
       created_at: new Date(comment.created_at ?? now),
       updated_at: comment.updated_at ? new Date(comment.updated_at) : null,
       data: {
