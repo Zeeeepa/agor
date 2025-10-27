@@ -26,6 +26,16 @@
   margin-bottom: 4rem;
 }
 
+.heroLogo {
+  width: 180px;
+  height: 180px;
+  margin: 0 auto 2rem;
+  display: block;
+  object-fit: contain;
+  border-radius: 50%;
+  opacity: 0.5;
+}
+
 .heroTitle {
   font-size: 5rem;
   font-weight: 800;

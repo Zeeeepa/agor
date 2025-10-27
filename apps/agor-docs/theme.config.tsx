@@ -10,7 +10,7 @@ const config: DocsThemeConfig = {
       <img
         src={`${basePath}/logo.png`}
         alt="agor"
-        style={{ height: '42px', width: '42px' }}
+        style={{ height: '42px', width: '42px', borderRadius: '50%' }}
         suppressHydrationWarning
       />
       <strong style={{ fontSize: '18px' }}>agor</strong>

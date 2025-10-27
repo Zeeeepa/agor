@@ -28,6 +28,7 @@ export function Hero({
 
       <div className={styles.hero}>
         <div className={styles.heroContent}>
+          <img src="/logo.png" alt="agor logo" className={styles.heroLogo} />
           <h1 className={styles.heroTitle}>{title}</h1>
           <p className={styles.heroSubtitle}>{subtitle}</p>
           {description && <p className={styles.heroDescription}>{description}</p>}
