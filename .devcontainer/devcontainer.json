@@ -3,7 +3,10 @@
   "build": {
     "dockerfile": "playground/Dockerfile",
     "context": "..",
-    "options": ["--cache-from=ghcr.io/mistercrunch/agor-playground:buildcache"]
+    "args": {
+      "BUILDKIT_INLINE_CACHE": "0"
+    },
+    "options": ["--cache-from=type=registry,ref=ghcr.io/mistercrunch/agor-playground:buildcache"]
   },
   "containerEnv": {
     "VITE_CODESPACES": "true",
