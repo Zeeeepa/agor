@@ -1,5 +1,7 @@
 import type { AgorClient } from '@agor/core/api';
 import type {
+  CodexApprovalPolicy,
+  CodexSandboxMode,
   MCPServer,
   PermissionMode,
   PermissionScope,
@@ -126,6 +128,12 @@ const SessionDrawer = ({
   const [permissionMode, setPermissionMode] = React.useState<PermissionMode>(
     session?.permission_config?.mode || getDefaultPermissionMode(session?.agentic_tool)
   );
+  const [codexSandboxMode, setCodexSandboxMode] = React.useState<CodexSandboxMode>(
+    session?.permission_config?.codex?.sandboxMode || 'workspace-write'
+  );
+  const [codexApprovalPolicy, setCodexApprovalPolicy] = React.useState<CodexApprovalPolicy>(
+    session?.permission_config?.codex?.approvalPolicy || 'on-request'
+  );
   const [scrollToBottom, setScrollToBottom] = React.useState<(() => void) | null>(null);
   const [isStopping, setIsStopping] = React.useState(false);
 
@@ -171,7 +179,18 @@ const SessionDrawer = ({
       // Set default based on agentic tool type if no permission mode is configured
       setPermissionMode(getDefaultPermissionMode(session.agentic_tool));
     }
-  }, [session?.permission_config?.mode, session?.agentic_tool, getDefaultPermissionMode]);
+
+    // Update Codex-specific permissions
+    if (session?.agentic_tool === 'codex' && session?.permission_config?.codex) {
+      setCodexSandboxMode(session.permission_config.codex.sandboxMode);
+      setCodexApprovalPolicy(session.permission_config.codex.approvalPolicy);
+    }
+  }, [
+    session?.permission_config?.mode,
+    session?.permission_config?.codex,
+    session?.agentic_tool,
+    getDefaultPermissionMode,
+  ]);
 
   // Scroll to bottom when drawer opens
   React.useEffect(() => {
@@ -263,6 +282,27 @@ const SessionDrawer = ({
         permission_config: {
           ...session.permission_config,
           mode: newMode,
+        },
+      });
+    }
+  };
+
+  const handleCodexPermissionChange = (
+    sandbox: CodexSandboxMode,
+    approval: CodexApprovalPolicy
+  ) => {
+    setCodexSandboxMode(sandbox);
+    setCodexApprovalPolicy(approval);
+
+    // Persist to database immediately (will broadcast via WebSocket)
+    if (session && onUpdateSession) {
+      onUpdateSession(session.session_id, {
+        permission_config: {
+          ...session.permission_config,
+          codex: {
+            sandboxMode: sandbox,
+            approvalPolicy: approval,
+          },
         },
       });
     }
@@ -502,9 +542,11 @@ const SessionDrawer = ({
                 value={permissionMode}
                 onChange={handlePermissionModeChange}
                 agentic_tool={session.agentic_tool}
+                codexSandboxMode={codexSandboxMode}
+                codexApprovalPolicy={codexApprovalPolicy}
+                onCodexChange={handleCodexPermissionChange}
                 compact
                 size="small"
-                width={200}
               />
               {isRunning && <Spin size="small" />}
               <Space.Compact>

@@ -128,21 +128,14 @@ export class CodexPromptService {
    * (not available in ThreadOptions). We minimize file writes by tracking a hash
    * of the configuration and only updating when it changes.
    *
+   * @param approvalPolicy - Codex approval policy (untrusted, on-request, on-failure, never)
+   * @param sessionId - Session ID for fetching MCP servers
    * @returns Number of MCP servers configured
    */
   private async ensureCodexConfig(
-    permissionMode: CodexPermissionMode,
+    approvalPolicy: 'untrusted' | 'on-request' | 'on-failure' | 'never',
     sessionId: SessionID
   ): Promise<number> {
-    const approvalPolicyMap: Record<CodexPermissionMode, string> = {
-      ask: 'untrusted', // Ask before running any command
-      auto: 'on-request', // Model decides when to ask (recommended)
-      'on-failure': 'on-failure', // Ask only when commands fail
-      'allow-all': 'never', // Never ask, auto-approve all operations
-    };
-
-    const approvalPolicy = approvalPolicyMap[permissionMode];
-
     // Fetch MCP servers for this session (if repository is available)
     console.log(`🔍 [Codex MCP] Fetching MCP servers for session ${sessionId.substring(0, 8)}...`);
     if (!this.sessionMCPServerRepo) {
@@ -339,29 +332,21 @@ ${mcpServersToml}`;
     console.log(`   Permission mode: ${permissionMode || 'not specified (will use default)'}`);
     console.log(`   Existing thread ID: ${session.sdk_session_id || 'none (will create new)'}`);
 
-    // Determine effective permission mode (default to 'auto' for Codex)
-    const effectivePermissionMode = (permissionMode ||
-      session.permission_config?.mode ||
-      'auto') as CodexPermissionMode;
-
     // HYBRID APPROACH: Codex permissions require TWO settings:
     // 1. sandboxMode (via ThreadOptions) - controls WHERE you can write
     // 2. approval_policy (via config.toml) - controls WHETHER agent asks before executing
 
-    // Map Agor permission modes to Codex SDK SandboxMode (passed via ThreadOptions)
-    const sandboxModeMap: Record<
-      CodexPermissionMode,
-      'read-only' | 'workspace-write' | 'danger-full-access'
-    > = {
-      ask: 'read-only',
-      auto: 'workspace-write',
-      'on-failure': 'workspace-write',
-      'allow-all': 'workspace-write',
-    };
-    const sandboxMode = sandboxModeMap[effectivePermissionMode];
+    // Read from session.permission_config.codex (dual config), fallback to defaults
+    const codexConfig = session.permission_config?.codex;
+    const sandboxMode = codexConfig?.sandboxMode || 'workspace-write';
+    const approvalPolicy = codexConfig?.approvalPolicy || 'on-request';
+
+    console.log(
+      `   Using Codex dual permissions: sandboxMode=${sandboxMode}, approvalPolicy=${approvalPolicy}`
+    );
 
     // Set approval_policy and MCP servers in config.toml (required because they're not available in ThreadOptions)
-    const mcpServerCount = await this.ensureCodexConfig(effectivePermissionMode, sessionId);
+    const mcpServerCount = await this.ensureCodexConfig(approvalPolicy, sessionId);
 
     const totalMcpServers = this.sessionMCPServerRepo
       ? (await this.sessionMCPServerRepo.listServers(sessionId, true)).length
@@ -393,9 +378,9 @@ ${mcpServersToml}`;
       sandboxMode,
     };
 
-    // Check if we need to update thread settings due to permission mode change
-    const sessionPermissionMode = session.permission_config?.mode || 'auto';
-    const permissionModeChanged = effectivePermissionMode !== sessionPermissionMode;
+    // Check if we need to update thread settings due to approval policy change
+    const previousApprovalPolicy = session.permission_config?.codex?.approvalPolicy || 'on-request';
+    const approvalPolicyChanged = approvalPolicy !== previousApprovalPolicy;
 
     // Start or resume thread
     let thread: Thread;
@@ -417,25 +402,16 @@ ${mcpServersToml}`;
 
       thread = this.codex.resumeThread(session.sdk_session_id, threadOptions);
 
-      // If permission mode changed, send slash commands to update thread settings
-      if (permissionModeChanged) {
+      // If approval policy changed, send slash command to update thread settings
+      if (approvalPolicyChanged) {
         console.log(
-          `⚙️  [Codex] Permission mode changed: ${sessionPermissionMode} → ${effectivePermissionMode}`
+          `⚙️  [Codex] Approval policy changed: ${previousApprovalPolicy} → ${approvalPolicy}`
         );
-        console.log(`   Sending slash commands to update thread settings...`);
-
-        // Map permission modes to Codex CLI slash command parameters
-        const approvalModeMap: Record<CodexPermissionMode, string> = {
-          ask: 'untrusted',
-          auto: 'on-request',
-          'on-failure': 'on-failure',
-          'allow-all': 'never',
-        };
-        const approvalMode = approvalModeMap[effectivePermissionMode];
+        console.log(`   Sending slash command to update thread settings...`);
 
         // Send /approvals command to change approval policy mid-conversation
         // Note: sandboxMode is already updated via ThreadOptions on resumeThread()
-        const slashCommand = `/approvals ${approvalMode}`;
+        const slashCommand = `/approvals ${approvalPolicy}`;
         console.log(`   Executing: ${slashCommand}`);
 
         try {

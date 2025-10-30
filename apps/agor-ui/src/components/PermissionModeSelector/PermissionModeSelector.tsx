@@ -1,4 +1,4 @@
-import type { PermissionMode } from '@agor/core/types';
+import type { CodexApprovalPolicy, CodexSandboxMode, PermissionMode } from '@agor/core/types';
 import {
   EditOutlined,
   ExperimentOutlined,
@@ -18,6 +18,12 @@ export interface PermissionModeSelectorProps {
   size?: 'small' | 'middle' | 'large';
   /** Width for compact mode */
   width?: number;
+  /** Codex-specific: sandbox mode value */
+  codexSandboxMode?: CodexSandboxMode;
+  /** Codex-specific: approval policy value */
+  codexApprovalPolicy?: CodexApprovalPolicy;
+  /** Codex-specific: callback for dual permission changes */
+  onCodexChange?: (sandbox: CodexSandboxMode, approval: CodexApprovalPolicy) => void;
 }
 
 // Claude Code permission modes (Claude Agent SDK)
@@ -127,6 +133,49 @@ const GEMINI_MODES: {
   },
 ];
 
+// Codex sandbox mode options
+const CODEX_SANDBOX_MODES = [
+  {
+    value: 'read-only',
+    label: 'read-only',
+    description: 'No filesystem writes',
+  },
+  {
+    value: 'workspace-write',
+    label: 'workspace-write',
+    description: 'Workspace files only (blocks .git/)',
+  },
+  {
+    value: 'danger-full-access',
+    label: 'full-access',
+    description: 'Full filesystem (including .git/)',
+  },
+];
+
+// Codex approval policy options
+const CODEX_APPROVAL_POLICIES = [
+  {
+    value: 'untrusted',
+    label: 'untrusted',
+    description: 'Ask for every operation',
+  },
+  {
+    value: 'on-request',
+    label: 'on-request',
+    description: 'Model decides when to ask',
+  },
+  {
+    value: 'on-failure',
+    label: 'on-failure',
+    description: 'Ask only on failures',
+  },
+  {
+    value: 'never',
+    label: 'never',
+    description: 'Auto-approve everything',
+  },
+];
+
 export const PermissionModeSelector: React.FC<PermissionModeSelectorProps> = ({
   value = 'auto',
   onChange,
@@ -134,6 +183,9 @@ export const PermissionModeSelector: React.FC<PermissionModeSelectorProps> = ({
   compact = false,
   size = 'middle',
   width = 200,
+  codexSandboxMode = 'workspace-write',
+  codexApprovalPolicy = 'on-request',
+  onCodexChange,
 }) => {
   // Select modes based on agentic tool type
   const modes =
@@ -147,13 +199,44 @@ export const PermissionModeSelector: React.FC<PermissionModeSelectorProps> = ({
   const defaultValue = agentic_tool === 'codex' ? 'auto' : 'acceptEdits';
   const effectiveValue = value || defaultValue;
 
-  // Compact mode: render as Select dropdown
+  // Compact mode: render as Select dropdown(s)
   if (compact) {
+    // Codex: Render 2 dropdowns (sandbox + approval)
+    if (agentic_tool === 'codex') {
+      return (
+        <Space size={8}>
+          <Select
+            value={codexSandboxMode}
+            onChange={val => onCodexChange?.(val, codexApprovalPolicy)}
+            size={size}
+            placeholder="Sandbox"
+            options={CODEX_SANDBOX_MODES.map(({ value, label, description }) => ({
+              label,
+              value,
+              title: description,
+            }))}
+          />
+          <Select
+            value={codexApprovalPolicy}
+            onChange={val => onCodexChange?.(codexSandboxMode, val)}
+            size={size}
+            placeholder="Approval"
+            options={CODEX_APPROVAL_POLICIES.map(({ value, label, description }) => ({
+              label,
+              value,
+              title: description,
+            }))}
+          />
+        </Space>
+      );
+    }
+
+    // Claude/Gemini: Single dropdown
     return (
       <Select
         value={effectiveValue}
         onChange={onChange}
-        style={{ width }}
+        style={width ? { width } : undefined}
         size={size}
         suffixIcon={<SafetyOutlined />}
         options={modes.map(({ mode, label, description }) => ({
@@ -167,7 +250,7 @@ export const PermissionModeSelector: React.FC<PermissionModeSelectorProps> = ({
 
   // Full mode: render as Radio group with descriptions
   return (
-    <Radio.Group value={effectiveValue} onChange={(e) => onChange?.(e.target.value)}>
+    <Radio.Group value={effectiveValue} onChange={e => onChange?.(e.target.value)}>
       <Space direction="vertical" style={{ width: '100%' }}>
         {modes.map(({ mode, label, description, icon, color }) => (
           <Radio key={mode} value={mode}>

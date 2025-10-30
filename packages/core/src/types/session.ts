@@ -1,6 +1,13 @@
 // src/types/session.ts
 
-import type { AgenticToolName } from './agentic-tool';
+import type {
+  AgenticToolName,
+  ClaudeCodePermissionMode,
+  CodexApprovalPolicy,
+  CodexPermissionMode,
+  CodexSandboxMode,
+  GeminiPermissionMode,
+} from './agentic-tool';
 import type { ContextFilePath } from './context';
 import type { SessionID, TaskID, WorktreeID } from './id';
 
@@ -38,11 +45,14 @@ export type PermissionMode =
   | 'on-failure'
   | 'allow-all';
 
-/** Claude Code specific permission modes */
-export type ClaudeCodePermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
-
-/** Codex specific permission modes */
-export type CodexPermissionMode = 'ask' | 'auto' | 'on-failure' | 'allow-all';
+// Re-export permission types from agentic-tool for convenience
+export type {
+  ClaudeCodePermissionMode,
+  CodexApprovalPolicy,
+  CodexPermissionMode,
+  CodexSandboxMode,
+  GeminiPermissionMode,
+};
 
 /**
  * Get the default permission mode for a given agentic tool
@@ -127,8 +137,15 @@ export interface Session {
   // Permission config (session-level tool approvals)
   permission_config?: {
     allowedTools?: string[];
-    /** Permission mode for agent tool execution */
+    /** Permission mode for agent tool execution (Claude/Gemini unified mode) */
     mode?: PermissionMode;
+    /** Codex-specific dual permission config (sandboxMode + approvalPolicy) */
+    codex?: {
+      /** Sandbox mode controls WHERE Codex can write (filesystem boundaries) */
+      sandboxMode: CodexSandboxMode;
+      /** Approval policy controls WHETHER Codex asks before executing */
+      approvalPolicy: CodexApprovalPolicy;
+    };
   };
 
   // Model configuration (session-level model selection)

@@ -400,14 +400,26 @@ export class ClaudeTool implements ITool {
     );
 
     if (this.sessionsRepo) {
-      console.log(
-        `📝 About to update session with: ${JSON.stringify({ sdk_session_id: agentSessionId })}`
-      );
-      const updated = await this.sessionsRepo.update(sessionId, {
-        sdk_session_id: agentSessionId,
-      });
-      console.log(`💾 Stored Agent SDK session_id in Agor session`);
-      console.log(`🔍 Verify: updated.sdk_session_id = ${updated.sdk_session_id}`);
+      try {
+        console.log(
+          `📝 About to update session with: ${JSON.stringify({ sdk_session_id: agentSessionId })}`
+        );
+        const updated = await this.sessionsRepo.update(sessionId, {
+          sdk_session_id: agentSessionId,
+        });
+        console.log(`💾 Stored Agent SDK session_id in Agor session`);
+        console.log(`🔍 Verify: updated.sdk_session_id = ${updated.sdk_session_id}`);
+      } catch (error) {
+        // Session may have been deleted mid-execution - gracefully ignore
+        if (error instanceof Error && error.message.includes('not found')) {
+          console.log(
+            `⚠️  Session ${sessionId} not found (likely deleted mid-execution) - skipping agent session ID capture`
+          );
+          return;
+        }
+        // Re-throw other errors
+        throw error;
+      }
     }
   }
 

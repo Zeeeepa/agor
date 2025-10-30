@@ -33,3 +33,49 @@ export interface AgenticTool {
   description?: string;
   installable: boolean;
 }
+
+// ============================================================================
+// Permission Types
+// ============================================================================
+
+/**
+ * Claude Code permission modes (via Claude Agent SDK)
+ *
+ * Unified permission model - single mode controls tool approval behavior.
+ */
+export type ClaudeCodePermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
+
+/**
+ * Gemini permission modes (via Gemini CLI SDK)
+ *
+ * Unified permission model - single mode controls tool approval behavior.
+ */
+export type GeminiPermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions';
+
+/**
+ * Codex permission modes (legacy - now split into sandboxMode + approvalPolicy)
+ *
+ * Codex uses a DUAL permission model with two independent settings:
+ * 1. sandboxMode - WHERE the agent can write (filesystem boundaries)
+ * 2. approvalPolicy - WHETHER the agent asks before executing
+ */
+export type CodexPermissionMode = 'ask' | 'auto' | 'on-failure' | 'allow-all';
+
+/**
+ * Codex sandbox mode - controls WHERE agent can write (filesystem boundaries)
+ *
+ * - read-only: No filesystem writes allowed
+ * - workspace-write: Write to workspace files only, blocks .git/ and system paths
+ * - danger-full-access: Full filesystem access including .git/ and system paths
+ */
+export type CodexSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
+
+/**
+ * Codex approval policy - controls WHETHER agent asks before executing
+ *
+ * - untrusted: Ask for every operation
+ * - on-request: Model decides when to ask (recommended)
+ * - on-failure: Only ask when operations fail
+ * - never: Auto-approve everything
+ */
+export type CodexApprovalPolicy = 'untrusted' | 'on-request' | 'on-failure' | 'never';

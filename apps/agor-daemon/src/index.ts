@@ -965,6 +965,49 @@ async function main() {
     // biome-ignore lint/suspicious/noExplicitAny: FeathersJS route handler type mismatch with Express RouteParams
   } as any);
 
+  /**
+   * Helper: Safely patch an entity, returning false if it was deleted mid-execution
+   */
+  async function safePatch<T>(
+    service: {
+      get: (id: string) => Promise<T>;
+      patch: (id: string, data: Partial<T>) => Promise<T>;
+    },
+    id: string,
+    data: Partial<T>,
+    entityType: string
+  ): Promise<boolean> {
+    try {
+      await service.patch(id, data);
+      return true;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('No record found')) {
+        console.log(
+          `⚠️  ${entityType} ${id.substring(0, 8)} was deleted mid-execution - skipping update`
+        );
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Helper: Check if an entity still exists
+   */
+  async function entityExists<T>(
+    service: { get: (id: string) => Promise<T> },
+    id: string
+  ): Promise<T | null> {
+    try {
+      return await service.get(id);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('No record found')) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
   app.use('/sessions/:id/prompt', {
     async create(
       data: {
@@ -1141,9 +1184,16 @@ async function main() {
               const endTimestamp = new Date().toISOString();
               const totalMessages = 1 + result.assistantMessageIds.length; // user + assistants
 
-              // Check current task status - don't overwrite terminal states
-              // (e.g., 'failed' from denied permission, 'awaiting_permission' still pending, 'stopping'/'stopped' from user cancel)
-              const currentTask = await tasksService.get(task.task_id);
+              // Check if task still exists and get current status
+              const currentTask = await entityExists(tasksService, task.task_id);
+              if (!currentTask) {
+                console.log(
+                  `⚠️  Task ${task.task_id.substring(0, 8)} was deleted mid-execution - aborting completion`
+                );
+                return;
+              }
+
+              // Don't overwrite terminal states
               if (
                 currentTask.status === TaskStatus.FAILED ||
                 currentTask.status === TaskStatus.AWAITING_PERMISSION ||
@@ -1155,14 +1205,19 @@ async function main() {
                 );
 
                 // Still update message range for completeness
-                await tasksService.patch(task.task_id, {
-                  message_range: {
-                    start_index: messageStartIndex,
-                    end_index: messageStartIndex + totalMessages - 1,
-                    start_timestamp: startTimestamp,
-                    end_timestamp: endTimestamp,
+                await safePatch(
+                  tasksService,
+                  task.task_id,
+                  {
+                    message_range: {
+                      start_index: messageStartIndex,
+                      end_index: messageStartIndex + totalMessages - 1,
+                      start_timestamp: startTimestamp,
+                      end_timestamp: endTimestamp,
+                    },
                   },
-                });
+                  'Task'
+                );
               } else {
                 // Safe to mark as completed
                 // Calculate estimated cost if usage data is available
@@ -1185,30 +1240,40 @@ async function main() {
                   };
                 }
 
-                await tasksService.patch(task.task_id, {
-                  status: TaskStatus.COMPLETED,
-                  message_range: {
-                    start_index: messageStartIndex,
-                    end_index: messageStartIndex + totalMessages - 1,
-                    start_timestamp: startTimestamp,
-                    end_timestamp: endTimestamp,
+                const updated = await safePatch(
+                  tasksService,
+                  task.task_id,
+                  {
+                    status: TaskStatus.COMPLETED,
+                    message_range: {
+                      start_index: messageStartIndex,
+                      end_index: messageStartIndex + totalMessages - 1,
+                      start_timestamp: startTimestamp,
+                      end_timestamp: endTimestamp,
+                    },
+                    usage,
                   },
-                  usage,
-                });
+                  'Task'
+                );
 
-                console.log(`✅ Task ${task.task_id} completed successfully`);
+                if (updated) {
+                  console.log(`✅ Task ${task.task_id} completed successfully`);
+                }
               }
 
-              await sessionsService.patch(id, {
-                message_count: session.message_count + totalMessages,
-                status: SessionStatus.IDLE,
-              });
+              await safePatch(
+                sessionsService,
+                id,
+                {
+                  message_count: session.message_count + totalMessages,
+                  status: SessionStatus.IDLE,
+                },
+                'Session'
+              );
             } catch (error) {
               console.error(`❌ Error completing task ${task.task_id}:`, error);
-              // Mark task as failed
-              await tasksService.patch(task.task_id, {
-                status: TaskStatus.FAILED,
-              });
+              // Try to mark task as failed (may also fail if deleted)
+              await safePatch(tasksService, task.task_id, { status: TaskStatus.FAILED }, 'Task');
             }
           })
           .catch(async error => {
@@ -1245,10 +1310,7 @@ async function main() {
               );
               console.warn(`   Clearing session ID - next prompt will start fresh`);
 
-              // Clear the sdk_session_id so next prompt starts fresh
-              await sessionsService.patch(id, {
-                sdk_session_id: undefined,
-              });
+              await safePatch(sessionsService, id, { sdk_session_id: undefined }, 'Session');
             } else if (isExitCode1 && hasResumeSession && !isLikelyConfigIssue) {
               // Generic exit code 1 with resume session (not explicitly stale)
               console.warn(
@@ -1258,10 +1320,7 @@ async function main() {
                 `   Session should have been validated before SDK call - clearing as safety measure`
               );
 
-              // Clear the sdk_session_id so next prompt starts fresh
-              await sessionsService.patch(id, {
-                sdk_session_id: undefined,
-              });
+              await safePatch(sessionsService, id, { sdk_session_id: undefined }, 'Session');
             } else if (isExitCode1 && hasResumeSession && isLikelyConfigIssue) {
               console.error(`❌ Exit code 1 due to configuration issue:`);
               console.error(`   ${errorMessage.substring(0, 200)}`);
@@ -1273,13 +1332,17 @@ async function main() {
             }
 
             // Mark task as failed with error message and set session back to idle
-            await tasksService.patch(task.task_id, {
-              status: TaskStatus.FAILED,
-              report: errorMessage, // Save error message so UI can display it
-            });
-            await sessionsService.patch(id, {
-              status: SessionStatus.IDLE,
-            });
+            await safePatch(
+              tasksService,
+              task.task_id,
+              {
+                status: TaskStatus.FAILED,
+                report: errorMessage, // Save error message so UI can display it
+              },
+              'Task'
+            );
+
+            await safePatch(sessionsService, id, { status: SessionStatus.IDLE }, 'Session');
           });
       });
 
