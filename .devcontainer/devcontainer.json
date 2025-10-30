@@ -1,6 +1,6 @@
 {
   "name": "Agor Playground (Recommended - Fast npm install)",
-  // Cache bust: 2025-10-29-v6 - Fix React hooks and JSX element reuse errors (0.4.8)
+  // Cache bust: 2025-10-30-v1 - API key hot-reload without daemon restart (0.4.9)
   "build": {
     "dockerfile": "playground/Dockerfile",
     "context": "..",
