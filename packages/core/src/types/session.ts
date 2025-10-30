@@ -126,7 +126,6 @@ export interface Session {
   /** Task IDs in this session */
   tasks: TaskID[];
   message_count: number;
-  tool_use_count: number;
 
   // UI metadata
   /** Session title (user-provided or auto-generated) */

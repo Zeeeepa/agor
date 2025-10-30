@@ -68,7 +68,6 @@ export class SessionsService extends DrizzleService<Session, Partial<Session>, S
         contextFiles: [...(parent.contextFiles || [])],
         tasks: [],
         message_count: 0,
-        tool_use_count: 0,
         // Don't copy sdk_session_id - fork will get its own via forkSession:true
       },
       params
@@ -126,7 +125,6 @@ export class SessionsService extends DrizzleService<Session, Partial<Session>, S
         contextFiles: [...(parent.contextFiles || [])],
         tasks: [],
         message_count: 0,
-        tool_use_count: 0,
         // Don't copy sdk_session_id - spawn will get its own via forkSession:true
       },
       params

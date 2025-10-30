@@ -51,7 +51,6 @@ import {
   SessionIdPill,
   SpawnPill,
   TokenCountPill,
-  ToolCountPill,
 } from '../Pill';
 import { ToolIcon } from '../ToolIcon';
 
@@ -523,7 +522,6 @@ const SessionDrawer = ({
                 showCopy={true}
               />
               <MessageCountPill count={session.message_count} />
-              <ToolCountPill count={session.tool_use_count} />
               {tokenBreakdown.total > 0 && (
                 <TokenCountPill
                   count={tokenBreakdown.total}

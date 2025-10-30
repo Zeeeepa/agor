@@ -278,7 +278,6 @@ describe('createPreToolUseHook', () => {
       },
       tasks: [],
       message_count: 0,
-      tool_use_count: 0,
       permission_config: { allowedTools: [] },
     };
 
@@ -367,7 +366,7 @@ describe('createPreToolUseHook', () => {
   it('should wait for existing permission lock before checking', async () => {
     const deps = createMockDeps();
     let lockResolved = false;
-    const existingLock = new Promise<void>((resolve) => {
+    const existingLock = new Promise<void>(resolve => {
       setTimeout(() => {
         lockResolved = true;
         resolve();

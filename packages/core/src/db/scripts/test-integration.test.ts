@@ -177,7 +177,6 @@ describe('Session Repository Integration', () => {
       contextFiles: [],
       tasks: [],
       message_count: 0,
-      tool_use_count: 0,
     });
 
     expect(session.session_id).toBeDefined();
@@ -202,7 +201,6 @@ describe('Session Repository Integration', () => {
       contextFiles: [],
       tasks: [],
       message_count: 0,
-      tool_use_count: 0,
     });
 
     const shortId = formatShortId(session.session_id);
@@ -229,7 +227,6 @@ describe('Session Repository Integration', () => {
       contextFiles: ['file1.ts', 'file2.ts'],
       tasks: [],
       message_count: 0,
-      tool_use_count: 0,
     });
 
     const found = await repo.findById(session.session_id);
@@ -256,7 +253,6 @@ describe('Session Repository Integration', () => {
         contextFiles: [],
         tasks: [],
         message_count: 0,
-        tool_use_count: 0,
       });
 
     await createSession(SessionStatus.IDLE);
@@ -296,7 +292,6 @@ describe('Session Repository Integration', () => {
         contextFiles: [],
         tasks: [],
         message_count: 0,
-        tool_use_count: 0,
       });
       expect(session.agentic_tool).toBe(tool);
     }
@@ -326,7 +321,6 @@ describe('Task Repository Integration', () => {
       contextFiles: [],
       tasks: [],
       message_count: 0,
-      tool_use_count: 0,
     });
 
     const task = await taskRepo.create({
@@ -372,7 +366,6 @@ describe('Task Repository Integration', () => {
         contextFiles: [],
         tasks: [],
         message_count: 0,
-        tool_use_count: 0,
       });
 
     const session1 = await createSession();
@@ -391,7 +384,6 @@ describe('Task Repository Integration', () => {
         },
         git_state: { ref_at_start: 'main', sha_at_start: 'abc' },
         model: 'claude-sonnet-4-5',
-        tool_use_count: 0,
       });
 
     await createTask(session1.session_id, 'Task 1');
@@ -423,7 +415,6 @@ describe('Task Repository Integration', () => {
       contextFiles: [],
       tasks: [],
       message_count: 0,
-      tool_use_count: 0,
     });
 
     const task = await taskRepo.create({
@@ -438,7 +429,6 @@ describe('Task Repository Integration', () => {
       },
       git_state: { ref_at_start: 'main', sha_at_start: 'abc' },
       model: 'claude-sonnet-4-5',
-      tool_use_count: 0,
     });
 
     const completedAt = new Date().toISOString();
@@ -600,7 +590,6 @@ describe('Session Genealogy', () => {
       contextFiles: [],
       tasks: [],
       message_count: 0,
-      tool_use_count: 0,
     });
 
     const fork = await repo.create({
@@ -617,7 +606,6 @@ describe('Session Genealogy', () => {
       contextFiles: [],
       tasks: [],
       message_count: 0,
-      tool_use_count: 0,
     });
 
     expect(fork.genealogy.forked_from_session_id).toBe(parent.session_id);
@@ -641,7 +629,6 @@ describe('Session Genealogy', () => {
       contextFiles: [],
       tasks: [],
       message_count: 0,
-      tool_use_count: 0,
     });
 
     const fork = await repo.create({
@@ -658,7 +645,6 @@ describe('Session Genealogy', () => {
       contextFiles: [],
       tasks: [],
       message_count: 0,
-      tool_use_count: 0,
     });
 
     const spawn = await repo.create({
@@ -675,7 +661,6 @@ describe('Session Genealogy', () => {
       contextFiles: [],
       tasks: [],
       message_count: 0,
-      tool_use_count: 0,
     });
 
     const children = await repo.findChildren(parent.session_id);
@@ -705,7 +690,6 @@ describe('Session Genealogy', () => {
       contextFiles: [],
       tasks: [],
       message_count: 0,
-      tool_use_count: 0,
     });
 
     const fork = await repo.create({
@@ -722,7 +706,6 @@ describe('Session Genealogy', () => {
       contextFiles: [],
       tasks: [],
       message_count: 0,
-      tool_use_count: 0,
     });
 
     const ancestors = await repo.findAncestors(fork.session_id);
@@ -778,7 +761,6 @@ describe('Error Handling', () => {
         contextFiles: [],
         tasks: [],
         message_count: 0,
-        tool_use_count: 0,
       })
     ).rejects.toThrow();
   });
@@ -830,13 +812,11 @@ describe('Edge Cases and Data Integrity', () => {
       contextFiles: [],
       tasks: [],
       message_count: 0,
-      tool_use_count: 0,
     });
 
     expect(session.contextFiles).toEqual([]);
     expect(session.tasks).toEqual([]);
     expect(session.message_count).toBe(0);
-    expect(session.tool_use_count).toBe(0);
   });
 
   it('should preserve exact ISO timestamp format', async () => {
@@ -857,7 +837,6 @@ describe('Edge Cases and Data Integrity', () => {
       contextFiles: [],
       tasks: [],
       message_count: 0,
-      tool_use_count: 0,
     });
 
     const timestamp = '2024-01-15T10:30:45.123Z';
@@ -873,7 +852,6 @@ describe('Edge Cases and Data Integrity', () => {
       },
       git_state: { ref_at_start: 'main', sha_at_start: 'abc' },
       model: 'claude-sonnet-4-5',
-      tool_use_count: 0,
     });
 
     expect(task.message_range.start_timestamp).toBe(timestamp);
@@ -897,7 +875,6 @@ describe('Edge Cases and Data Integrity', () => {
       contextFiles: [],
       tasks: [],
       message_count: 0,
-      tool_use_count: 0,
     });
 
     const description = 'Task with "quotes", \'apostrophes\', and <tags>';
@@ -913,7 +890,6 @@ describe('Edge Cases and Data Integrity', () => {
       },
       git_state: { ref_at_start: 'main', sha_at_start: 'abc' },
       model: 'claude-sonnet-4-5',
-      tool_use_count: 0,
     });
 
     expect(task.description).toBe(description);
@@ -941,7 +917,6 @@ describe('Edge Cases and Data Integrity', () => {
       contextFiles: [],
       tasks: [],
       message_count: 0,
-      tool_use_count: 0,
     });
 
     expect(session.git_state.base_sha).toBe(sha);
