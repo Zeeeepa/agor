@@ -14,7 +14,7 @@ import type {
   Worktree,
 } from '@agor/core/types';
 import { PermissionScope } from '@agor/core/types';
-import { Layout } from 'antd';
+import { Layout, message } from 'antd';
 import { useEffect, useState } from 'react';
 import { usePresence } from '../../hooks/usePresence';
 import { AppHeader } from '../AppHeader';
@@ -464,8 +464,14 @@ export const App: React.FC<AppProps> = ({
             }}
           />
           <NewSessionButton
-            onClick={() => setNewWorktreeModalOpen(true)}
-            disabled={repos.length === 0}
+            onClick={() => {
+              if (repos.length === 0) {
+                message.warning('Please create a repository first in Settings');
+              } else {
+                setNewWorktreeModalOpen(true);
+              }
+            }}
+            hasRepos={repos.length > 0}
           />
         </div>
       </Content>
