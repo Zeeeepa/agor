@@ -78,7 +78,7 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
         mcpServersResult,
         sessionMcpResult,
       ] = await Promise.all([
-        client.service('sessions').find({ query: { $sort: { updated_at: -1 } } }), // Fetch all sessions, sorted by most recent
+        client.service('sessions').find({ query: { $limit: 1000, $sort: { updated_at: -1 } } }), // Fetch up to 1000 sessions, sorted by most recent
         client.service('tasks').find({ query: { $limit: 500 } }), // Fetch up to 500 tasks
         client.service('boards').find(),
         client.service('board-objects').find(),

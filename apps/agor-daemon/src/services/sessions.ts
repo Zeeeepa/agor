@@ -31,7 +31,7 @@ export class SessionsService extends DrizzleService<Session, Partial<Session>, S
       id: 'session_id',
       paginate: {
         default: 50,
-        max: 100,
+        max: 1000, // Increased from 100 to allow fetching more sessions
       },
       multi: ['patch', 'remove'], // Allow multi-patch and multi-remove
     });
