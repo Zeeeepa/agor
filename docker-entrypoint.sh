@@ -3,10 +3,10 @@ set -e
 
 echo "🚀 Starting Agor development environment..."
 
-# Check dependencies (pnpm install is smart - only updates what changed)
-# Fast if node_modules exists: ~1-2s, First run: ~30-60s
+# Check dependencies (prefer frozen lockfile for speed, but allow updates if needed)
+# Fast if lockfile matches: ~1-2s (headless install), First run or lockfile change: ~30-60s
 echo "📦 Checking dependencies..."
-pnpm install --reporter=append-only --no-frozen-lockfile
+pnpm install --reporter=append-only --prefer-frozen-lockfile
 
 # Build @agor/core (required for CLI commands and daemon)
 echo "🔨 Building @agor/core..."
