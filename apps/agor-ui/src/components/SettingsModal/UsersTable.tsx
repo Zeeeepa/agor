@@ -17,6 +17,7 @@ import {
 import { useEffect, useState } from 'react';
 import { ApiKeyFields, type ApiKeyStatus } from '../ApiKeyFields';
 import { FormEmojiPickerInput } from '../EmojiPickerInput';
+import { EnvVarEditor } from '../EnvVarEditor';
 
 // Using Typography.Text directly to avoid DOM Text interface collision
 
@@ -41,7 +42,11 @@ export const UsersTable: React.FC<UsersTableProps> = ({ users, onCreate, onUpdat
   });
   const [savingApiKeys, setSavingApiKeys] = useState<Record<string, boolean>>({});
 
-  // Load user's API key status when editing
+  // Environment variable management state for user edit
+  const [userEnvVars, setUserEnvVars] = useState<Record<string, boolean>>({});
+  const [savingEnvVars, setSavingEnvVars] = useState<Record<string, boolean>>({});
+
+  // Load user's API key and env var status when editing
   useEffect(() => {
     if (editingUser?.api_keys) {
       setUserApiKeyStatus({
@@ -56,6 +61,12 @@ export const UsersTable: React.FC<UsersTableProps> = ({ users, onCreate, onUpdat
         GEMINI_API_KEY: false,
       });
     }
+
+    if (editingUser?.env_vars) {
+      setUserEnvVars(editingUser.env_vars);
+    } else {
+      setUserEnvVars({});
+    }
   }, [editingUser]);
 
   const handleDelete = (userId: string) => {
@@ -63,7 +74,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({ users, onCreate, onUpdat
   };
 
   const handleCreate = () => {
-    form.validateFields().then((values) => {
+    form.validateFields().then(values => {
       onCreate?.({
         email: values.email,
         password: values.password,
@@ -110,7 +121,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({ users, onCreate, onUpdat
         setEditModalOpen(false);
         setEditingUser(null);
       })
-      .catch((err) => {
+      .catch(err => {
         console.error('Validation failed:', err);
       });
   };
@@ -120,7 +131,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({ users, onCreate, onUpdat
     if (!editingUser) return;
 
     try {
-      setSavingApiKeys((prev) => ({ ...prev, [field]: true }));
+      setSavingApiKeys(prev => ({ ...prev, [field]: true }));
 
       // Update user via onUpdate callback
       await onUpdate?.(editingUser.user_id, {
@@ -130,12 +141,12 @@ export const UsersTable: React.FC<UsersTableProps> = ({ users, onCreate, onUpdat
       });
 
       // Update local state
-      setUserApiKeyStatus((prev) => ({ ...prev, [field]: true }));
+      setUserApiKeyStatus(prev => ({ ...prev, [field]: true }));
     } catch (err) {
       console.error(`Failed to save ${field}:`, err);
       throw err;
     } finally {
-      setSavingApiKeys((prev) => ({ ...prev, [field]: false }));
+      setSavingApiKeys(prev => ({ ...prev, [field]: false }));
     }
   };
 
@@ -144,7 +155,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({ users, onCreate, onUpdat
     if (!editingUser) return;
 
     try {
-      setSavingApiKeys((prev) => ({ ...prev, [field]: true }));
+      setSavingApiKeys(prev => ({ ...prev, [field]: true }));
 
       // Update user via onUpdate callback
       await onUpdate?.(editingUser.user_id, {
@@ -154,12 +165,52 @@ export const UsersTable: React.FC<UsersTableProps> = ({ users, onCreate, onUpdat
       });
 
       // Update local state
-      setUserApiKeyStatus((prev) => ({ ...prev, [field]: false }));
+      setUserApiKeyStatus(prev => ({ ...prev, [field]: false }));
     } catch (err) {
       console.error(`Failed to clear ${field}:`, err);
       throw err;
     } finally {
-      setSavingApiKeys((prev) => ({ ...prev, [field]: false }));
+      setSavingApiKeys(prev => ({ ...prev, [field]: false }));
+    }
+  };
+
+  // Handle user env var save
+  const handleEnvVarSave = async (key: string, value: string) => {
+    if (!editingUser) return;
+
+    try {
+      setSavingEnvVars(prev => ({ ...prev, [key]: true }));
+      await onUpdate?.(editingUser.user_id, {
+        env_vars: { [key]: value },
+      });
+      setUserEnvVars(prev => ({ ...prev, [key]: true }));
+    } catch (err) {
+      console.error(`Failed to save ${key}:`, err);
+      throw err;
+    } finally {
+      setSavingEnvVars(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
+  // Handle user env var delete
+  const handleEnvVarDelete = async (key: string) => {
+    if (!editingUser) return;
+
+    try {
+      setSavingEnvVars(prev => ({ ...prev, [key]: true }));
+      await onUpdate?.(editingUser.user_id, {
+        env_vars: { [key]: null },
+      });
+      setUserEnvVars(prev => {
+        const updated = { ...prev };
+        delete updated[key];
+        return updated;
+      });
+    } catch (err) {
+      console.error(`Failed to delete ${key}:`, err);
+      throw err;
+    } finally {
+      setSavingEnvVars(prev => ({ ...prev, [key]: false }));
     }
   };
 
@@ -271,6 +322,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({ users, onCreate, onUpdat
           setCreateModalOpen(false);
         }}
         okText="Create"
+        width={800}
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
           <Form.Item label="Name" style={{ marginBottom: 24 }}>
@@ -333,6 +385,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({ users, onCreate, onUpdat
           setEditingUser(null);
         }}
         okText="Save"
+        width={800}
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
           <Form.Item label="Name" style={{ marginBottom: 24 }}>
@@ -393,6 +446,29 @@ export const UsersTable: React.FC<UsersTableProps> = ({ users, onCreate, onUpdat
                         onSave={handleApiKeySave}
                         onClear={handleApiKeyClear}
                         saving={savingApiKeys}
+                      />
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          </Form.Item>
+
+          {/* Environment Variables Section */}
+          <Form.Item label="Environment Variables">
+            <Collapse
+              ghost
+              items={[
+                {
+                  key: 'env-vars',
+                  label: 'Configure Environment Variables',
+                  children: (
+                    <div style={{ paddingTop: 8 }}>
+                      <EnvVarEditor
+                        envVars={userEnvVars}
+                        onSave={handleEnvVarSave}
+                        onDelete={handleEnvVarDelete}
+                        loading={savingEnvVars}
                       />
                     </div>
                   ),
