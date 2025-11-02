@@ -567,11 +567,8 @@ const SessionCanvas = ({
             parentLabel = info.parentLabel;
             parentColor = info.parentColor;
           } else {
-            // Zone was deleted - treat as free-floating
-            position = comment.position?.absolute ?? { x: 0, y: 0 };
-            parentId = undefined;
-            parentLabel = undefined;
-            parentColor = undefined;
+            // Zone was deleted - skip rendering this comment
+            continue;
           }
         } else if (rel.parent_type === 'worktree') {
           // Parent is a worktree - validate worktree exists
@@ -582,11 +579,8 @@ const SessionCanvas = ({
             parentLabel = info.parentLabel;
             parentColor = info.parentColor;
           } else {
-            // Worktree was deleted - treat as free-floating
-            position = comment.position?.absolute ?? { x: 0, y: 0 };
-            parentId = undefined;
-            parentLabel = undefined;
-            parentColor = undefined;
+            // Worktree was deleted - skip rendering this comment
+            continue;
           }
         }
       } else if (comment.position?.absolute) {
