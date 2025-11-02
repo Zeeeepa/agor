@@ -123,7 +123,8 @@ export class HealthMonitor {
       // Only check if still running or starting
       const status = worktree.environment_instance?.status;
       if (status !== 'running' && status !== 'starting') {
-        console.log(`🏥 Worktree ${worktree.name} no longer running/starting, stopping monitoring`);
+        // Silently stop monitoring (not an error - expected when env stops)
+        // Start/stop logs are already handled in handleWorktreeUpdate()
         this.stopMonitoring(worktreeId);
         return;
       }
@@ -169,7 +170,7 @@ export class HealthMonitor {
 
       // Start monitoring running or starting worktrees
       const activeWorktrees = worktrees.filter(
-        (w) =>
+        w =>
           w.environment_instance?.status === 'running' ||
           w.environment_instance?.status === 'starting'
       );
