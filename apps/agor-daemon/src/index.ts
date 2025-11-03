@@ -2455,8 +2455,19 @@ async function main() {
       // Close Socket.io connections (this also closes the HTTP server)
       if (socketServer) {
         console.log('🔌 Closing Socket.io and HTTP server...');
+        // Disconnect all active clients first
+        socketServer.disconnectSockets();
+        // Give sockets a moment to disconnect
+        await new Promise<void>(resolve => setTimeout(resolve, 100));
+        // Now close the server with a timeout
         await new Promise<void>(resolve => {
+          const timeout = setTimeout(() => {
+            console.warn('⚠️  Server close timeout, forcing exit');
+            resolve();
+          }, 2000);
+
           socketServer?.close(() => {
+            clearTimeout(timeout);
             console.log('✅ Server closed');
             resolve();
           });
