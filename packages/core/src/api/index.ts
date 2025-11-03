@@ -20,6 +20,7 @@ import type {
 import authentication from '@feathersjs/authentication-client';
 import type { Application, Paginated, Params } from '@feathersjs/feathers';
 import { feathers } from '@feathersjs/feathers';
+import rest from '@feathersjs/rest-client';
 import socketio from '@feathersjs/socketio-client';
 import io, { type Socket } from 'socket.io-client';
 
@@ -259,8 +260,29 @@ export function createClient(
   options?: {
     /** Show connection status logs (useful for CLI) */
     verbose?: boolean;
+    /** Use REST-only transport (no WebSocket) - for CLI to prevent hanging */
+    restOnly?: boolean;
   }
 ): AgorClient {
+  // For CLI commands, use REST-only transport to avoid hanging processes
+  if (options?.restOnly) {
+    const client = feathers<ServiceTypes>() as AgorClient;
+
+    // Configure REST transport
+    client.configure(rest(url).fetch(fetch));
+
+    // Configure authentication with no storage (CLI will manage tokens separately)
+    client.configure(authentication({ storage: undefined }));
+
+    // Create a dummy socket object to satisfy the interface
+    client.io = {
+      close: () => {},
+      removeAllListeners: () => {},
+      io: { opts: {} },
+    } as any;
+
+    return client;
+  }
   // Configure socket.io with better defaults for React StrictMode and reconnection
   const socket = io(url, {
     // Auto-connect by default for CLI, manual control for React hooks

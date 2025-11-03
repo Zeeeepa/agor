@@ -9,6 +9,7 @@ import { createClient, isDaemonRunning } from '@agor/core/api';
 import { getDaemonUrl } from '@agor/core/config';
 import { Command } from '@oclif/core';
 import chalk from 'chalk';
+import { loadToken } from './lib/auth';
 
 /**
  * Base command with daemon connection utilities
@@ -45,8 +46,45 @@ export abstract class BaseCommand extends Command {
       this.exit(1);
     }
 
-    // Create and return client (no verbose logging, health check already passed)
-    return createClient(this.daemonUrl, true, { verbose: false });
+    // Create client with REST-only transport (prevents hanging processes)
+    const client = createClient(this.daemonUrl, true, { verbose: false, restOnly: true });
+
+    // Load stored authentication token
+    const storedAuth = await loadToken();
+
+    if (storedAuth) {
+      try {
+        // Authenticate with stored JWT token
+        await client.authenticate({
+          strategy: 'jwt',
+          accessToken: storedAuth.accessToken,
+        });
+      } catch (error) {
+        // Token invalid or expired - clear it and show login prompt
+        const { clearToken } = await import('./lib/auth');
+        await clearToken();
+        this.error(
+          chalk.red('✗ Authentication failed') +
+            '\n\n' +
+            chalk.dim('Your session has expired or is invalid.') +
+            '\n' +
+            chalk.dim('Please login again:') +
+            '\n  ' +
+            chalk.cyan('agor login')
+        );
+      }
+    } else {
+      // No stored token - user needs to login
+      this.error(
+        chalk.red('✗ Not authenticated') +
+          '\n\n' +
+          chalk.dim('Please login to use the Agor CLI:') +
+          '\n  ' +
+          chalk.cyan('agor login')
+      );
+    }
+
+    return client;
   }
 
   /**
@@ -55,16 +93,16 @@ export abstract class BaseCommand extends Command {
    * Ensures socket is properly closed to prevent hanging processes
    */
   protected async cleanupClient(client: AgorClient): Promise<void> {
-    await new Promise<void>((resolve) => {
-      // Use 'once' to prevent memory leak from accumulating listeners
-      client.io.once('disconnect', () => resolve());
-      // Remove all other listeners before closing
-      client.io.removeAllListeners('connect');
-      client.io.removeAllListeners('connect_error');
-      // Close the socket
-      client.io.close();
-      // Fallback timeout in case disconnect doesn't fire
-      setTimeout(resolve, 1000);
-    });
+    // Disable reconnection before closing to prevent new connection attempts
+    client.io.io.opts.reconnection = false;
+
+    // Remove all event listeners to prevent them from keeping process alive
+    client.io.removeAllListeners();
+
+    // Close the socket connection
+    client.io.close();
+
+    // Give a brief moment for cleanup, then force exit
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
   }
 }

@@ -118,17 +118,9 @@ export class SchedulerService {
   private async tick(): Promise<void> {
     const now = Date.now();
 
-    if (this.config.debug) {
-      console.log(`⏰ Scheduler tick at ${new Date(now).toISOString()}`);
-    }
-
     try {
       // 1. Fetch enabled schedules
       const enabledWorktrees = await this.getEnabledSchedules();
-
-      if (this.config.debug) {
-        console.log(`   Found ${enabledWorktrees.length} enabled schedules`);
-      }
 
       // 2. Process each schedule
       for (const worktree of enabledWorktrees) {
@@ -157,21 +149,8 @@ export class SchedulerService {
     // Fetch all worktrees using repository (no auth checks, we're in the same process)
     const allWorktrees = await this.worktreeRepo.findAll();
 
-    if (this.config.debug) {
-      console.log(`   DEBUG: All worktrees (${allWorktrees.length} total):`);
-      for (const wt of allWorktrees) {
-        console.log(
-          `     - ${wt.name}: schedule_enabled=${wt.schedule_enabled} (type: ${typeof wt.schedule_enabled})`
-        );
-      }
-    }
-
     // Filter to only enabled schedules
     const enabledSchedules = allWorktrees.filter(wt => wt.schedule_enabled === true);
-
-    if (this.config.debug) {
-      console.log(`   DEBUG: Found ${enabledSchedules.length} enabled schedules`);
-    }
 
     return enabledSchedules;
   }
@@ -188,9 +167,6 @@ export class SchedulerService {
    */
   private async processSchedule(worktree: Worktree, now: number): Promise<void> {
     if (!worktree.schedule_cron) {
-      if (this.config.debug) {
-        console.log(`   ⏭️  Skipping ${worktree.name}: no cron expression`);
-      }
       return;
     }
 
@@ -215,33 +191,6 @@ export class SchedulerService {
       const timeSinceNext = now - nextRunAt;
       scheduledRunAt = nextRunAt;
       isDue = timeSinceNext >= 0 && timeSinceNext < this.config.gracePeriod;
-    }
-
-    if (this.config.debug) {
-      const prevRunDate = new Date(prevRunAt).toISOString();
-      const nextRunAt = getNextRunTime(worktree.schedule_cron, new Date(now));
-      const nextRunDate = new Date(nextRunAt).toISOString();
-      const lastRunDate = worktree.schedule_last_triggered_at
-        ? new Date(worktree.schedule_last_triggered_at).toISOString()
-        : 'never';
-
-      const timeSinceMs = Math.abs(now - scheduledRunAt);
-      const timeDisplay =
-        scheduledRunAt > now
-          ? `${Math.floor(timeSinceMs / 60000)}m ${Math.floor((timeSinceMs % 60000) / 1000)}s until run`
-          : `${Math.floor(timeSinceMs / 60000)}m ${Math.floor((timeSinceMs % 60000) / 1000)}s overdue`;
-
-      console.log(`   📋 ${worktree.name}:`);
-      console.log(`      - Cron: ${worktree.schedule_cron}`);
-      console.log(
-        `      - Prev scheduled: ${prevRunDate} (${Math.floor(timeSincePrev / 1000)}s ago)`
-      );
-      console.log(`      - Next scheduled: ${nextRunDate}`);
-      console.log(`      - Last executed: ${lastRunDate}`);
-      console.log(`      - Target run: ${new Date(scheduledRunAt).toISOString()}`);
-      console.log(`      - Time delta: ${timeDisplay}`);
-      console.log(`      - Grace period: ${this.config.gracePeriod / 1000}s`);
-      console.log(`      - Is due: ${isDue}`);
     }
 
     if (!isDue) {
@@ -280,28 +229,15 @@ export class SchedulerService {
     const schedule = worktree.schedule;
 
     // 1. Check deduplication using repository
-    if (this.config.debug) {
-      console.log(
-        `      🔍 Checking for existing session at ${new Date(scheduledRunAt).toISOString()}`
-      );
-    }
-
     // Use repository to check for existing sessions (bypasses auth)
     const allSessions = await this.sessionRepo.findAll();
     const worktreeSessions = allSessions.filter(s => s.worktree_id === worktree.worktree_id);
     const existingSession = worktreeSessions.find(s => s.scheduled_run_at === scheduledRunAt);
 
     if (existingSession) {
-      console.log(
-        `      ⏭️  Session already exists for run ${new Date(scheduledRunAt).toISOString()}`
-      );
       // Still update next_run_at to prevent repeated checks
       await this.updateScheduleMetadata(worktree, scheduledRunAt, now);
       return;
-    }
-
-    if (this.config.debug) {
-      console.log(`      ✨ No existing session found, creating new one...`);
     }
 
     // 2. Render prompt template
@@ -351,21 +287,12 @@ export class SchedulerService {
       const sessionsService = this.app.service('sessions');
       const createdSession = await sessionsService.create(session);
       console.log(
-        `      ✅ Spawned scheduled session ${createdSession.session_id} for ${worktree.name} (run #${runIndex})`
+        `      ✅ Spawned scheduled session for ${worktree.name} (run #${runIndex})`
       );
 
-      if (this.config.debug) {
-        console.log(`         - Session ID: ${createdSession.session_id}`);
-        console.log(`         - Agent: ${schedule.agentic_tool}`);
-        console.log(`         - Scheduled for: ${new Date(scheduledRunAt).toISOString()}`);
-        console.log(`         - Run index: ${runIndex}`);
-      }
-
       // 5. Trigger prompt execution (creates task and starts agent)
-      console.log(`      🚀 Triggering prompt execution...`);
-
       const promptService = this.app.service('/sessions/:id/prompt');
-      const promptResponse = await promptService.create(
+      await promptService.create(
         {
           prompt: renderedPrompt,
           permissionMode: createdSession.permission_config?.mode || 'acceptEdits',
@@ -375,16 +302,6 @@ export class SchedulerService {
           route: { id: createdSession.session_id },
         }
       );
-
-      console.log(
-        `      ✅ Prompt execution started: task ${promptResponse.taskId.substring(0, 8)}`
-      );
-
-      if (this.config.debug) {
-        console.log(`         - Prompt: ${renderedPrompt.substring(0, 100)}...`);
-        console.log(`         - Task ID: ${promptResponse.taskId}`);
-        console.log(`         - Status: ${promptResponse.status}`);
-      }
 
       // TODO: Attach MCP servers if specified in schedule.mcp_server_ids
 
@@ -450,21 +367,11 @@ export class SchedulerService {
       // Compute next run time from cron expression
       const nextRunAt = getNextRunTime(worktree.schedule_cron, new Date(now));
 
-      if (this.config.debug) {
-        console.log(`      📅 Updating schedule metadata:`);
-        console.log(`         - Last triggered: ${new Date(scheduledRunAt).toISOString()}`);
-        console.log(`         - Next run: ${new Date(nextRunAt).toISOString()}`);
-      }
-
       // Update worktree using repository (bypasses auth)
       await this.worktreeRepo.update(worktree.worktree_id, {
         schedule_last_triggered_at: scheduledRunAt, // Use scheduled time, not execution time
         schedule_next_run_at: nextRunAt,
       });
-
-      console.log(
-        `      ✅ Schedule metadata updated, next run at ${new Date(nextRunAt).toISOString()}`
-      );
     } catch (error) {
       console.error(`      ❌ Failed to update schedule metadata:`, error);
       throw error;
@@ -504,12 +411,6 @@ export class SchedulerService {
       const sessionsToDelete = scheduledSessions.slice(retention);
 
       if (sessionsToDelete.length > 0) {
-        if (this.config.debug) {
-          console.log(
-            `      🗑️  Deleting ${sessionsToDelete.length} old sessions (retention: ${retention})`
-          );
-        }
-
         // Use Feathers service to delete (triggers WebSocket events)
         const sessionService = this.app.service('sessions');
         for (const session of sessionsToDelete) {
@@ -518,7 +419,7 @@ export class SchedulerService {
         }
 
         console.log(
-          `      ✅ Deleted ${sessionsToDelete.length} old sessions (retention: ${retention})`
+          `      🗑️  Deleted ${sessionsToDelete.length} old sessions (retention: ${retention})`
         );
       }
     } catch (error) {
