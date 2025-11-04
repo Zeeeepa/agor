@@ -40,7 +40,7 @@ export const SessionSettingsModal: React.FC<SessionSettingsModalProps> = ({
   const [initialValues, setInitialValues] = React.useState<{
     title: string;
     mcpServerIds: string[];
-    modelConfig: ModelConfig | undefined;
+    modelConfig: Session['model_config'];
     permissionMode: string;
     custom_context: string;
   }>({
