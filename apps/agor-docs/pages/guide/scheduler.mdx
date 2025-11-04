@@ -1,0 +1,108 @@
+---
+title: Worktree Scheduler
+description: Automate recurring work in Agor by attaching cron-driven agent sessions to any worktree.
+---
+
+# Worktree Scheduler
+
+Agor is built to orchestrate autonomous teammates. The scheduler turns every worktree into a programmable surface: attach a cadence, hand it a prompt, and Agor will spin up fresh sessions with full context and the authority to act—just like a human collaborator.
+
+## Why a Scheduler?
+
+- **Automation is everything.** Worktrees are the durable unit of work in Agor; scheduling keeps them progressing without waiting for a human to click “run.”
+- **Supervision becomes routine.** Because Agor’s agents are self-aware (they can see boards, sessions, and metadata) and they have the same MCP access you do, schedules can watch active work and step in when something drifts.
+- **MCP makes it limitless.** Pair the scheduler with Slack, GitHub, HubSpot, or any other MCP server and you can move information—or trigger actions—anywhere your tooling reaches.
+
+Think of it as an always-on teammate: “Every morning, look at the last 24 hours of activity, write up a report, and post it in #agor,” or “Every Friday, tidy the Superset worktrees; if the PR merged, stop the Docker environment and archive the worktree record.”
+
+![Configure schedule modal](/screenshots/worktree_schedule.png)
+
+## How Scheduled Runs Work
+
+- **Worktree-scoped configuration.** Each worktree can store a single schedule (toggleable at any time). All metadata lives with the worktree so it survives session churn.
+- **Cron-driven cadence.** The daemon tracks `schedule_cron`, `schedule_next_run_at`, and `schedule_last_triggered_at` for efficient ticking. Cron parsing and humanization use `cron-parser` and `cronstrue`.
+- **Fresh session per run.** When a run fires, Agor creates a new session titled `Scheduled: <worktree>`, stamps `scheduled_run_at` with the planned timestamp, and records run details in `session.custom_context.scheduled_run`.
+- **Self-aware execution.** The session launches with the worktree + board context, inherits the agent/tool settings you chose, and (with MCP enabled) can take all the actions a user could.
+- **Smart reliability.** Runs are deduplicated (two-minute grace window), there’s no backfill flood after downtime (only the most recent missed slot fires), and an optional retention policy keeps history trimmed.
+
+> Each scheduled run leaves behind a complete session transcript—perfect for audits, postmortems, or seeding future prompts.
+
+## Configuring a Schedule
+
+1. **Open the worktree modal.** From a board card or the worktree list, choose “Open” → `Schedule` tab.
+2. **Toggle `Enable Schedule`.** Flip the switch to activate or pause the schedule for that worktree.
+3. **Set the cadence.**
+   - Use the visual cron builder (`react-js-cron`) or type directly.
+   - A human-readable preview (via `cronstrue`) confirms the cadence.
+   - Schedules run in UTC today; adjust the cron expression if you need a different local time.
+4. **Configure the agent.**
+   - Pick the agentic tool (Claude Code, Cursor, Codex, Gemini) that will own the run.
+   - In Advanced settings, select the model, permission mode, and MCP servers/context files to attach.
+   - Prefer a permissive permission mode (e.g., `auto`) for unattended automation, otherwise the agent may pause mid-run waiting for approval.
+5. **Author the prompt template.**
+   - Prompts use Handlebars; you can reference worktree, board, or schedule data (see below).
+6. **Set retention.**
+   - Keep the last _N_ scheduled sessions (0 = keep everything). Older runs are removed automatically.
+7. **Save.** The daemon validates the cron, computes the next run, and will handle execution from the next tick forward.
+
+You can edit the schedule whenever you like; changes apply to the next run. Disabling the schedule clears the upcoming run timestamp but preserves your configuration for later.
+
+## Template Variables & Context
+
+Prompt templates render with a full, typed context:
+
+```handlebars
+Check {{worktree.pull_request_url}} for new reviews since {{schedule.scheduled_time}}.
+If it merged, stop the Docker environment and archive the worktree.
+```
+
+Available fields:
+
+- `worktree.*` – `name`, `ref`, `issue_url`, `pull_request_url`, `notes`, `custom_context`.
+- `board.*` – `name`, `description`, `custom_context` (when the worktree is on a board).
+- `schedule.*` – `cron`, `scheduled_time`, `retention`, and any advanced configuration snapshot.
+
+Use conditionals or loops (standard Handlebars) to branch based on metadata.
+
+## Supervisory Automation Patterns
+
+- **Ops report bot.** Every 24 hours, call the Slack MCP: summarize new sessions, flag failures, and post to `#agor`.
+- **GitHub intelligence.** Nightly, list everything merged in `preset-io/*` via the GitHub MCP, write a changelog, and email it out.
+- **Revenue radar.** Weekly, query HubSpot MCP for new leads, enrich with LinkedIn, rank them, and drop the plan in `#sales`.
+- **Environment janitor.** Hourly, scan the Superset board; if a “Completed” task’s PR merged, stop its Docker environment and delete the worktree record.
+- **Dependency upkeep.** Monday at 02:00, run npm updates, execute tests, and open a follow-up session for any failures.
+
+Because MCP is just JSON-RPC, you can bring any service into the loop—Agor’s internal MCP for orchestration, Slack for comms, HubSpot for CRM, or custom servers for bespoke workflows.
+
+## Monitoring & History
+
+- Scheduled sessions appear wherever you normally view sessions, marked with the clock icon. Each run includes:
+  - `custom_context.scheduled_run.rendered_prompt` for audit trails.
+  - `run_index` to show execution count.
+  - A config snapshot in case you tweak the schedule later.
+- Use retention to keep noise down; the daemon automatically deletes older runs beyond your limit.
+- Need to rerun immediately? Manually spawn a session, or adjust/save the cron for a new next run.
+
+## Best Practices
+
+- **Stay idempotent.** Assume runs might retry; avoid prompts that double-post or delete blindly.
+- **Log visibly.** Have agents append notes to the worktree or board so humans can see what happened.
+- **Permit headless automation.** If you expect the agent to operate unattended, set permission mode to `auto` (or a custom mode that doesn’t prompt) before saving the schedule.
+- **Attach the right MCP servers.** Make sure Slack, GitHub, HubSpot, etc. are registered and selected so scheduled agents have the tools they need.
+- **Keep prompts contextual.** Leverage `worktree.custom_context` and board data instead of hard-coded values.
+- **Pilot before scaling.** Run the first few executions manually to confirm output before letting it run unattended.
+
+## Troubleshooting
+
+- **“Invalid cron expression.”** The UI validates with `cron-parser`; edit the expression or pick a preset.
+- **No session fired.** Confirm the schedule is enabled and `Next run` is in the past—remember the two-minute grace window.
+- **Agent lacks permissions.** Switch permission mode to `auto` or attach the necessary MCP servers in advanced settings.
+- **Timezone surprises.** Everything evaluates in UTC today; adjust the cron or translate from your local time.
+
+## Related Reading
+
+- [Architecture Guide](./architecture#scheduler-service) – deeper dive into the daemon’s background workers.
+- [Agent SDK Comparison](./sdk-comparison) – choose the right agent for scheduled tasks.
+- Context exploration: `context/explorations/scheduler.md`
+- Concepts: `context/concepts/worktrees.md`, `context/concepts/mcp-integration.md`
+
