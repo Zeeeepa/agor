@@ -123,10 +123,6 @@ export const SessionSettingsModal: React.FC<SessionSettingsModalProps> = ({
 
       // Apply session updates if any
       if (Object.keys(updates).length > 0 && onUpdate) {
-        console.debug(
-          `💾 SessionSettingsModal.handleOk: calling onUpdate with`,
-          Object.keys(updates)
-        );
         onUpdate(session.session_id, updates);
       }
 
@@ -135,7 +131,6 @@ export const SessionSettingsModal: React.FC<SessionSettingsModalProps> = ({
 
       // Update MCP server attachments
       if (onUpdateSessionMcpServers) {
-        console.debug(`🔧 SessionSettingsModal.handleOk: calling onUpdateSessionMcpServers`);
         onUpdateSessionMcpServers(session.session_id, values.mcpServerIds || []);
       }
 

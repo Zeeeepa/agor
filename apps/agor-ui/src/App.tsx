@@ -480,10 +480,6 @@ function AppContent() {
     sessionId: string,
     updates: Partial<import('@agor/core/types').Session>
   ) => {
-    console.debug(
-      `📝 handleUpdateSession called for ${sessionId.substring(0, 8)} with updates:`,
-      Object.keys(updates)
-    );
     const session = await updateSession(sessionId as import('@agor/core/types').SessionID, updates);
     if (session) {
       message.success('Session updated successfully!');

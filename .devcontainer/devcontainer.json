@@ -1,6 +1,6 @@
 {
   "name": "Agor Playground (Recommended - Fast npm install)",
-  // Cache bust: 2025-11-04-v6 - Version 0.6.10 - Run as non-root 'agor' user to fix Claude Code bypassPermissions in Codespaces
+  // Cache bust: 2025-11-04-v7 - Version 0.6.10 - Fix double session save and clean console logs
   "build": {
     "dockerfile": "playground/Dockerfile",
     "context": "..",

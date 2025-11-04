@@ -352,7 +352,6 @@ const SessionDrawer = ({
 
     // Persist to database immediately (will broadcast via WebSocket)
     if (session && onUpdateSession) {
-      console.debug(`🔐 handlePermissionModeChange: updating to ${newMode}`);
       onUpdateSession(session.session_id, {
         permission_config: {
           ...session.permission_config,
