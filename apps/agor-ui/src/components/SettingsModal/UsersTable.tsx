@@ -494,14 +494,20 @@ export const UsersTable: React.FC<UsersTableProps> = ({
       <Modal
         title="Edit User"
         open={editModalOpen}
-        onOk={handleUpdate}
+        onOk={activeTab === 'general' ? handleUpdate : undefined}
         onCancel={() => {
           form.resetFields();
           setEditModalOpen(false);
           setEditingUser(null);
           setActiveTab('general');
         }}
-        okText="Save"
+        okText={activeTab === 'general' ? 'Save' : undefined}
+        cancelText="Close"
+        footer={
+          activeTab === 'general'
+            ? undefined // Use default footer with Save/Close buttons
+            : (_, { CancelBtn }) => <CancelBtn /> // Only show Close button for other tabs
+        }
         width={900}
         styles={{
           body: {
