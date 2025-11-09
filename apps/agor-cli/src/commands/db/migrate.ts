@@ -79,9 +79,28 @@ export default class DbMigrate extends Command {
       // Verify all migrations applied
       const afterStatus = await checkMigrationStatus(db);
       if (afterStatus.hasPending) {
-        this.error(
-          `Migration verification failed! Still have ${afterStatus.pending.length} pending migration(s): ${afterStatus.pending.join(', ')}`
-        );
+        this.log('');
+        this.log(chalk.red('✗ Migration verification failed!'));
+        this.log('');
+        this.log(`Still have ${afterStatus.pending.length} pending migration(s):`);
+        afterStatus.pending.forEach(tag => {
+          this.log(`  ${chalk.red('•')} ${tag}`);
+        });
+        this.log('');
+        this.log(chalk.bold('Possible causes:'));
+        this.log('  1. Migration SQL file was modified after being applied');
+        this.log('  2. Package build cache is stale');
+        this.log('  3. Schema changes were made manually outside migrations');
+        this.log('');
+        this.log(chalk.bold('Diagnostic steps:'));
+        this.log('  1. Check if columns already exist:');
+        this.log(chalk.cyan(`     sqlite3 ${dbFilePath} "PRAGMA table_info(worktrees)"`));
+        this.log('  2. Rebuild core package:');
+        this.log(chalk.cyan('     cd packages/core && pnpm build'));
+        this.log('  3. Check migration hashes:');
+        this.log(chalk.cyan(`     sqlite3 ${dbFilePath} "SELECT hash FROM __drizzle_migrations"`));
+        this.log('');
+        this.error(`Migration verification failed`);
       }
 
       this.log('');
