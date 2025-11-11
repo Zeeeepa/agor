@@ -12,10 +12,11 @@ import { dirname, join } from 'node:path';
 import { ENVIRONMENT } from '@agor/core/config';
 import { type Database, WorktreeRepository } from '@agor/core/db';
 import type { Application } from '@agor/core/feathers';
-import { removeWorktree } from '@agor/core/git';
+import { cleanWorktree, removeWorktree } from '@agor/core/git';
 import { renderTemplate } from '@agor/core/templates/handlebars-helpers';
 import type {
   BoardEntityObject,
+  BoardID,
   QueryParams,
   Repo,
   UUID,
@@ -235,6 +236,182 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     }
 
     return result as Worktree;
+  }
+
+  /**
+   * Custom method: Archive or delete worktree with filesystem options
+   *
+   * This method implements the archive/delete modal functionality.
+   * Supports both soft delete (archive) and hard delete, with granular filesystem control.
+   *
+   * @param id - Worktree ID
+   * @param options - Archive/delete configuration
+   * @param params - Query params
+   */
+  async archiveOrDelete(
+    id: WorktreeID,
+    options: {
+      metadataAction: 'archive' | 'delete';
+      filesystemAction: 'preserved' | 'cleaned' | 'deleted';
+    },
+    params?: WorktreeParams
+  ): Promise<Worktree | { deleted: true; worktree_id: WorktreeID }> {
+    const { metadataAction, filesystemAction } = options;
+    const worktree = await this.get(id, params);
+    const currentUserId = 'anonymous' as UUID; // TODO: Get from auth context
+
+    // Stop environment if running
+    if (worktree.environment_instance?.status === 'running') {
+      console.log(
+        `⚠️  Stopping environment for worktree ${worktree.name} before ${metadataAction}`
+      );
+      try {
+        await this.stopEnvironment(id, params);
+      } catch (error) {
+        console.warn(
+          `Failed to stop environment, continuing with ${metadataAction}:`,
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    }
+
+    // Perform filesystem action first (before DB changes)
+    let filesRemoved = 0;
+    if (filesystemAction === 'cleaned') {
+      console.log(`🧹 Cleaning worktree filesystem: ${worktree.path}`);
+      try {
+        const result = await cleanWorktree(worktree.path);
+        filesRemoved = result.filesRemoved;
+        console.log(`✅ Cleaned ${filesRemoved} files from ${worktree.name}`);
+      } catch (error) {
+        console.error(
+          `⚠️  Failed to clean worktree:`,
+          error instanceof Error ? error.message : String(error)
+        );
+        // Continue with archive/delete even if clean fails
+      }
+    } else if (filesystemAction === 'deleted') {
+      console.log(`🗑️  Deleting worktree from filesystem: ${worktree.path}`);
+      try {
+        const repo = (await this.app.service('repos').get(worktree.repo_id)) as Repo;
+        await removeWorktree(repo.local_path, worktree.path);
+        console.log(`✅ Deleted worktree from filesystem: ${worktree.name}`);
+      } catch (error) {
+        console.error(
+          `⚠️  Failed to delete worktree:`,
+          error instanceof Error ? error.message : String(error)
+        );
+        // Continue with archive/delete even if filesystem deletion fails
+      }
+    }
+
+    // Metadata action: archive or delete
+    if (metadataAction === 'archive') {
+      // Archive: Soft delete worktree and cascade to sessions
+      console.log(`📦 Archiving worktree: ${worktree.name} (filesystem: ${filesystemAction})`);
+
+      // Update worktree
+      const archivedWorktree = await this.patch(
+        id,
+        {
+          archived: true,
+          archived_at: new Date().toISOString(),
+          archived_by: currentUserId,
+          filesystem_status: filesystemAction,
+          board_id: undefined, // Remove from board
+          updated_at: new Date().toISOString(),
+        },
+        params
+      );
+
+      // Archive all sessions in this worktree
+      const sessionsService = this.app.service('sessions');
+      const sessionsResult = await sessionsService.find({
+        query: { worktree_id: id, $limit: 1000 },
+        paginate: false,
+      });
+      const sessions = Array.isArray(sessionsResult) ? sessionsResult : sessionsResult.data;
+
+      for (const session of sessions) {
+        await sessionsService.patch(
+          session.session_id,
+          {
+            archived: true,
+            archived_reason: 'worktree_archived',
+          },
+          params
+        );
+      }
+
+      console.log(`✅ Archived worktree ${worktree.name} and ${sessions.length} session(s)`);
+      return archivedWorktree as Worktree;
+    } else {
+      // Delete: Hard delete (CASCADE will remove sessions, messages, tasks)
+      console.log(`🗑️  Permanently deleting worktree: ${worktree.name}`);
+
+      await this.remove(id, params);
+
+      console.log(`✅ Permanently deleted worktree ${worktree.name}`);
+      return { deleted: true, worktree_id: id };
+    }
+  }
+
+  /**
+   * Custom method: Unarchive a worktree
+   */
+  async unarchive(
+    id: WorktreeID,
+    options?: { boardId?: BoardID },
+    params?: WorktreeParams
+  ): Promise<Worktree> {
+    const worktree = await this.get(id, params);
+
+    if (!worktree.archived) {
+      throw new Error(`Worktree ${worktree.name} is not archived`);
+    }
+
+    console.log(`📦 Unarchiving worktree: ${worktree.name}`);
+
+    // Update worktree - clear archive metadata
+    const unarchivedWorktree = await this.patch(
+      id,
+      {
+        archived: false,
+        archived_at: undefined,
+        archived_by: undefined,
+        filesystem_status: undefined,
+        board_id: options?.boardId, // Optionally restore to board
+        updated_at: new Date().toISOString(),
+      },
+      params
+    );
+
+    // Unarchive all sessions that were archived due to worktree archival
+    const sessionsService = this.app.service('sessions');
+    const sessionsResult = await sessionsService.find({
+      query: {
+        worktree_id: id,
+        archived: true,
+        archived_reason: 'worktree_archived',
+        $limit: 1000,
+      },
+      paginate: false,
+    });
+    const sessions = Array.isArray(sessionsResult) ? sessionsResult : sessionsResult.data;
+
+    for (const session of sessions) {
+      await sessionsService.patch(
+        session.session_id,
+        {
+          archived: false,
+          archived_reason: undefined,
+        },
+        params
+      );
+    }
+
+    console.log(`✅ Unarchived worktree ${worktree.name} and ${sessions.length} session(s)`);
+    return unarchivedWorktree as Worktree;
   }
 
   /**

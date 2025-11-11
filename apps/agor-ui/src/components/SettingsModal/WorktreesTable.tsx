@@ -4,7 +4,9 @@ import {
   BranchesOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  CodeSandboxOutlined,
   DeleteOutlined,
+  DropboxOutlined,
   EditOutlined,
   FolderOutlined,
   GlobalOutlined,
@@ -22,6 +24,7 @@ import {
   Form,
   Input,
   Modal,
+  Select,
   Space,
   Table,
   Tooltip,
@@ -29,7 +32,7 @@ import {
   theme,
 } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { DeleteWorktreePopconfirm } from '../DeleteWorktreePopconfirm';
+import { ArchiveDeleteWorktreeModal } from '../ArchiveDeleteWorktreeModal';
 import { WorktreeFormFields } from '../WorktreeFormFields';
 
 interface WorktreesTableProps {
@@ -37,7 +40,14 @@ interface WorktreesTableProps {
   repos: Repo[];
   boards: import('@agor/core/types').Board[];
   sessions: Session[];
-  onDelete?: (worktreeId: string, deleteFromFilesystem: boolean) => void;
+  onArchiveOrDelete?: (
+    worktreeId: string,
+    options: {
+      metadataAction: 'archive' | 'delete';
+      filesystemAction: 'preserved' | 'cleaned' | 'deleted';
+    }
+  ) => void;
+  onUnarchive?: (worktreeId: string, options?: { boardId?: string }) => void;
   onCreate?: (
     repoId: string,
     data: {
@@ -59,7 +69,8 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
   repos,
   boards,
   sessions,
-  onDelete,
+  onArchiveOrDelete,
+  onUnarchive,
   onCreate,
   onRowClick,
   onStartEnvironment,
@@ -72,6 +83,10 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
   const [isFormValid, setIsFormValid] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [archiveFilter, setArchiveFilter] = useState<'all' | 'active' | 'archived'>('active');
+  const [archiveDeleteModalOpen, setArchiveDeleteModalOpen] = useState(false);
+  const [selectedWorktree, setSelectedWorktree] = useState<Worktree | null>(null);
+  const [hoveredArchiveButton, setHoveredArchiveButton] = useState<string | null>(null);
 
   const reposById = useMemo(() => new Map(repos.map(repo => [repo.repo_id, repo])), [repos]);
 
@@ -196,8 +211,14 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
     form.setFieldValue('sourceBranch', defaultBranch);
   };
 
-  const handleDelete = (worktreeId: string, deleteFromFilesystem: boolean) => {
-    onDelete?.(worktreeId, deleteFromFilesystem);
+  const handleArchiveOrDelete = (
+    worktreeId: string,
+    options: {
+      metadataAction: 'archive' | 'delete';
+      filesystemAction: 'preserved' | 'cleaned' | 'deleted';
+    }
+  ) => {
+    onArchiveOrDelete?.(worktreeId, options);
   };
 
   const handleCreate = async () => {
@@ -370,9 +391,41 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
     {
       title: 'Actions',
       key: 'actions',
-      width: 100,
+      width: 130,
       render: (_: unknown, record: Worktree) => (
         <Space size="small">
+          <Tooltip title={record.archived ? 'Archived • Click to unarchive' : 'Click to archive'}>
+            <Button
+              type="text"
+              size="small"
+              icon={
+                hoveredArchiveButton === record.worktree_id ? (
+                  // Hovered: show opposite icon (preview the action)
+                  record.archived ? (
+                    <DropboxOutlined style={{ color: token.colorSuccess }} />
+                  ) : (
+                    <CodeSandboxOutlined style={{ color: token.colorWarning }} />
+                  )
+                ) : // Not hovered: show current state
+                record.archived ? (
+                  <CodeSandboxOutlined style={{ color: token.colorWarning }} />
+                ) : (
+                  <DropboxOutlined style={{ color: token.colorTextSecondary }} />
+                )
+              }
+              onMouseEnter={() => setHoveredArchiveButton(record.worktree_id)}
+              onMouseLeave={() => setHoveredArchiveButton(null)}
+              onClick={e => {
+                e.stopPropagation();
+                if (record.archived) {
+                  onUnarchive?.(record.worktree_id);
+                } else {
+                  setSelectedWorktree(record);
+                  setArchiveDeleteModalOpen(true);
+                }
+              }}
+            />
+          </Tooltip>
           <Button
             type="text"
             size="small"
@@ -382,21 +435,17 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
               onRowClick?.(record);
             }}
           />
-          <DeleteWorktreePopconfirm
-            worktree={record}
-            sessionCount={sessions.filter(s => s.worktree_id === record.worktree_id).length}
-            onConfirm={deleteFromFilesystem =>
-              handleDelete(record.worktree_id, deleteFromFilesystem)
-            }
-          >
-            <Button
-              type="text"
-              size="small"
-              icon={<DeleteOutlined />}
-              danger
-              onClick={e => e.stopPropagation()}
-            />
-          </DeleteWorktreePopconfirm>
+          <Button
+            type="text"
+            size="small"
+            icon={<DeleteOutlined />}
+            danger
+            onClick={e => {
+              e.stopPropagation();
+              setSelectedWorktree(record);
+              setArchiveDeleteModalOpen(true);
+            }}
+          />
         </Space>
       ),
     },
@@ -408,11 +457,20 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
 
-    if (!term) {
-      return sorted;
+    // Filter by archive status
+    let filtered = sorted;
+    if (archiveFilter === 'active') {
+      filtered = sorted.filter(w => !w.archived);
+    } else if (archiveFilter === 'archived') {
+      filtered = sorted.filter(w => w.archived);
     }
 
-    return sorted.filter(worktree => {
+    // Filter by search term
+    if (!term) {
+      return filtered;
+    }
+
+    return filtered.filter(worktree => {
       const repo = reposById.get(worktree.repo_id);
       const haystacks = [
         worktree.name,
@@ -430,7 +488,7 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
         return value.toString().toLowerCase().includes(term);
       });
     });
-  }, [reposById, searchTerm, worktrees]);
+  }, [archiveFilter, reposById, searchTerm, worktrees]);
 
   return (
     <div>
@@ -443,13 +501,25 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
           Manage git worktrees for isolated development contexts across sessions.
         </Typography.Text>
         <Space style={{ width: '100%', display: 'flex', justifyContent: 'space-between' }}>
-          <Input
-            allowClear
-            placeholder="Search by name, repo, slug, path, or ID"
-            value={searchTerm}
-            onChange={event => setSearchTerm(event.target.value)}
-            style={{ maxWidth: token.sizeUnit * 40 }}
-          />
+          <Space>
+            <Input
+              allowClear
+              placeholder="Search by name, repo, slug, path, or ID"
+              value={searchTerm}
+              onChange={event => setSearchTerm(event.target.value)}
+              style={{ maxWidth: token.sizeUnit * 40 }}
+            />
+            <Select
+              value={archiveFilter}
+              onChange={value => setArchiveFilter(value)}
+              style={{ width: 120 }}
+              options={[
+                { value: 'active', label: 'Active' },
+                { value: 'all', label: 'All' },
+                { value: 'archived', label: 'Archived' },
+              ]}
+            />
+          </Space>
           <Button
             type="primary"
             icon={<PlusOutlined />}
@@ -546,6 +616,24 @@ export const WorktreesTable: React.FC<WorktreesTableProps> = ({
           />
         </Form>
       </Modal>
+
+      {selectedWorktree && (
+        <ArchiveDeleteWorktreeModal
+          open={archiveDeleteModalOpen}
+          worktree={selectedWorktree}
+          sessionCount={sessions.filter(s => s.worktree_id === selectedWorktree.worktree_id).length}
+          environmentRunning={selectedWorktree.environment_instance?.status === 'running'}
+          onConfirm={options => {
+            handleArchiveOrDelete(selectedWorktree.worktree_id, options);
+            setArchiveDeleteModalOpen(false);
+            setSelectedWorktree(null);
+          }}
+          onCancel={() => {
+            setArchiveDeleteModalOpen(false);
+            setSelectedWorktree(null);
+          }}
+        />
+      )}
     </div>
   );
 };

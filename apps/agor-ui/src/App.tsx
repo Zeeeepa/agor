@@ -635,18 +635,42 @@ function AppContent() {
     }
   };
 
-  const handleDeleteWorktree = async (worktreeId: string, deleteFromFilesystem: boolean) => {
+  const handleArchiveOrDeleteWorktree = async (
+    worktreeId: string,
+    options: {
+      metadataAction: 'archive' | 'delete';
+      filesystemAction: 'preserved' | 'cleaned' | 'deleted';
+    }
+  ) => {
     if (!client) return;
     try {
-      // Use worktrees service: DELETE /worktrees/:id with query parameter
-      await client.service('worktrees').remove(worktreeId, {
-        query: { deleteFromFilesystem },
+      const action = options.metadataAction === 'archive' ? 'archived' : 'deleted';
+      message.loading({
+        content: `${options.metadataAction === 'archive' ? 'Archiving' : 'Deleting'} worktree...`,
+        key: 'archive-delete',
+        duration: 0,
       });
-      message.success('Worktree deleted successfully!');
+      await client.service(`worktrees/${worktreeId}/archive-or-delete`).create(options);
+      message.success({ content: `Worktree ${action} successfully!`, key: 'archive-delete' });
     } catch (error) {
-      message.error(
-        `Failed to delete worktree: ${error instanceof Error ? error.message : String(error)}`
-      );
+      message.error({
+        content: `Failed to ${options.metadataAction} worktree: ${error instanceof Error ? error.message : String(error)}`,
+        key: 'archive-delete',
+      });
+    }
+  };
+
+  const handleUnarchiveWorktree = async (worktreeId: string, options?: { boardId?: string }) => {
+    if (!client) return;
+    try {
+      message.loading({ content: 'Unarchiving worktree...', key: 'unarchive', duration: 0 });
+      await client.service(`worktrees/${worktreeId}/unarchive`).create(options || {});
+      message.success({ content: 'Worktree unarchived successfully!', key: 'unarchive' });
+    } catch (error) {
+      message.error({
+        content: `Failed to unarchive worktree: ${error instanceof Error ? error.message : String(error)}`,
+        key: 'unarchive',
+      });
     }
   };
 
@@ -1025,7 +1049,8 @@ function AppContent() {
                 onCreateRepo={handleCreateRepo}
                 onUpdateRepo={handleUpdateRepo}
                 onDeleteRepo={handleDeleteRepo}
-                onDeleteWorktree={handleDeleteWorktree}
+                onArchiveOrDeleteWorktree={handleArchiveOrDeleteWorktree}
+                onUnarchiveWorktree={handleUnarchiveWorktree}
                 onUpdateWorktree={handleUpdateWorktree}
                 onCreateWorktree={handleCreateWorktree}
                 onStartEnvironment={handleStartEnvironment}
