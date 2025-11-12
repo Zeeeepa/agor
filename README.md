@@ -107,6 +107,7 @@ agor open
 **The Problem:** Working on 3 PRs simultaneously? Each needs different ports, dependencies, database states.
 
 **Agor's Solution:**
+
 - Each worktree gets its own **isolated environment** with auto-managed unique ports
 - Configure start/stop commands once with templates: `PORT={{ add 9000 worktree.unique_id }} docker compose up -d`
 - Everyone on your team can **one-click start/stop** any worktree's environment
@@ -147,7 +148,7 @@ Your team has 3 bug fixes and 2 features in flight. With Agor:
 ## Screenshots
 
 <div align="center">
-  <img src="https://github.com/preset-io/agor/releases/download/v0.3.15/hero.png" alt="Agor Board" style="width: 100%; border-radius: 8px; margin-bottom: 24px;" />
+  <img src="https://github.com/preset-io/agor/releases/download/v0.7.9/hero.png" alt="Agor Board" style="width: 100%; border-radius: 8px; margin-bottom: 24px;" />
   <p style="opacity: 0.5;"><em>Multiplayer spatial canvas with zones, worktrees, and real-time collaboration</em></p>
 </div>
 
