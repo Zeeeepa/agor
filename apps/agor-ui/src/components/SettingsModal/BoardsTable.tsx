@@ -230,7 +230,7 @@ export const BoardsTable: React.FC<BoardsTableProps> = ({
             name="background_color"
             help="Set a custom background color for the board canvas"
           >
-            <ColorPicker showText format="hex" />
+            <ColorPicker showText format="hex" allowClear />
           </Form.Item>
 
           <Form.Item
@@ -281,7 +281,7 @@ export const BoardsTable: React.FC<BoardsTableProps> = ({
             name="background_color"
             help="Set a custom background color for the board canvas"
           >
-            <ColorPicker showText format="hex" />
+            <ColorPicker showText format="hex" allowClear />
           </Form.Item>
 
           <Form.Item
