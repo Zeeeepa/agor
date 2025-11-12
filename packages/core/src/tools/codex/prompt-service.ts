@@ -248,7 +248,8 @@ export class CodexPromptService {
       managedServerConfigs[serverName] = serverConfig;
     }
 
-    // Create hash to detect changes (include network access in hash)
+    // Create hash to detect changes (include network access and worktree path in hash)
+    // IMPORTANT: Include worktreePath so different worktrees can have different configs
     const configHashPayload = stdioServers.map(server => ({
       id: server.mcp_server_id,
       transport: server.transport,
@@ -256,7 +257,7 @@ export class CodexPromptService {
       args: server.args,
       env: server.env,
     }));
-    const configHash = `${approvalPolicy}:${networkAccess}:${JSON.stringify(configHashPayload)}`;
+    const configHash = `${worktreePath}:${approvalPolicy}:${networkAccess}:${JSON.stringify(configHashPayload)}`;
 
     // Skip if config hasn't changed (avoid unnecessary file I/O)
     if (this.lastMCPServersHash === configHash) {
@@ -266,6 +267,16 @@ export class CodexPromptService {
 
     const configTargets: Array<{ label: 'global' | 'worktree'; path: string }> = [];
 
+    // CRITICAL: Write to worktree-local .codex/config.toml first (highest priority)
+    // Codex reads repo-local config before global config, so this ensures MCP servers are visible
+    if (worktreePath) {
+      configTargets.push({
+        label: 'worktree',
+        path: path.join(worktreePath, '.codex', 'config.toml'),
+      });
+    }
+
+    // Also write to global config as fallback
     const homeDir = process.env.HOME || process.env.USERPROFILE;
     if (homeDir) {
       configTargets.push({
