@@ -57,15 +57,18 @@ cp -r "$REPO_ROOT/packages/core/dist/"* "$SCRIPT_DIR/dist/core/"
 
 # Create package.json for @agor/core in dist/core by copying exports from source
 echo "  → Creating package.json for bundled @agor/core..."
-# Use jq to extract exports from source package.json and create a minimal package.json
-jq '{
-  name: "@agor/core",
-  version: "0.1.0",
-  type: "module",
-  main: "./index.js",
-  types: "./index.d.ts",
-  exports: .exports
-}' "$REPO_ROOT/packages/core/package.json" > "$SCRIPT_DIR/dist/core/package.json"
+# Use jq to extract exports from source package.json and strip "dist/" prefix from paths
+jq '
+  def strip_dist: gsub("\\./dist/"; "./");
+  {
+    name: "@agor/core",
+    version: "0.1.0",
+    type: "module",
+    main: "./index.js",
+    types: "./index.d.ts",
+    exports: (.exports | walk(if type == "string" then strip_dist else . end))
+  }
+' "$REPO_ROOT/packages/core/package.json" > "$SCRIPT_DIR/dist/core/package.json"
 
 # Copy CLI
 echo "  → Copying CLI..."
