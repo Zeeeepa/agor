@@ -55,139 +55,17 @@ echo "  → Copying core..."
 mkdir -p "$SCRIPT_DIR/dist/core"
 cp -r "$REPO_ROOT/packages/core/dist/"* "$SCRIPT_DIR/dist/core/"
 
-# Create package.json for @agor/core in dist/core with corrected paths
+# Create package.json for @agor/core in dist/core by copying exports from source
 echo "  → Creating package.json for bundled @agor/core..."
-cat > "$SCRIPT_DIR/dist/core/package.json" << 'PKGJSON'
-{
-  "name": "@agor/core",
-  "version": "0.1.0",
-  "type": "module",
-  "main": "./index.js",
-  "types": "./index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./index.d.ts",
-      "import": "./index.js",
-      "require": "./index.cjs"
-    },
-    "./types": {
-      "types": "./types/index.d.ts",
-      "import": "./types/index.js",
-      "require": "./types/index.cjs"
-    },
-    "./db": {
-      "types": "./db/index.d.ts",
-      "import": "./db/index.js",
-      "require": "./db/index.cjs"
-    },
-    "./git": {
-      "types": "./git/index.d.ts",
-      "import": "./git/index.js",
-      "require": "./git/index.cjs"
-    },
-    "./api": {
-      "types": "./api/index.d.ts",
-      "import": "./api/index.js",
-      "require": "./api/index.cjs"
-    },
-    "./claude": {
-      "types": "./claude/index.d.ts",
-      "import": "./claude/index.js",
-      "require": "./claude/index.cjs"
-    },
-    "./config": {
-      "types": "./config/index.d.ts",
-      "import": "./config/index.js",
-      "require": "./config/index.cjs"
-    },
-    "./config/browser": {
-      "types": "./config/browser.d.ts",
-      "import": "./config/browser.js",
-      "require": "./config/browser.cjs"
-    },
-    "./tools": {
-      "types": "./tools/index.d.ts",
-      "import": "./tools/index.js",
-      "require": "./tools/index.cjs"
-    },
-    "./tools/models": {
-      "types": "./tools/models.d.ts",
-      "import": "./tools/models.js",
-      "require": "./tools/models.cjs"
-    },
-    "./tools/claude/models": {
-      "types": "./tools/claude/models.d.ts",
-      "import": "./tools/claude/models.js",
-      "require": "./tools/claude/models.cjs"
-    },
-    "./permissions": {
-      "types": "./permissions/index.d.ts",
-      "import": "./permissions/index.js",
-      "require": "./permissions/index.cjs"
-    },
-    "./feathers": {
-      "types": "./feathers/index.d.ts",
-      "import": "./feathers/index.js",
-      "require": "./feathers/index.cjs"
-    },
-    "./lib/feathers-validation": {
-      "types": "./lib/feathers-validation.d.ts",
-      "import": "./lib/feathers-validation.js",
-      "require": "./lib/feathers-validation.cjs"
-    },
-    "./templates/handlebars-helpers": {
-      "types": "./templates/handlebars-helpers.d.ts",
-      "import": "./templates/handlebars-helpers.js",
-      "require": "./templates/handlebars-helpers.cjs"
-    },
-    "./environment/variable-resolver": {
-      "types": "./environment/variable-resolver.d.ts",
-      "import": "./environment/variable-resolver.js",
-      "require": "./environment/variable-resolver.cjs"
-    },
-    "./utils/pricing": {
-      "types": "./utils/pricing.d.ts",
-      "import": "./utils/pricing.js",
-      "require": "./utils/pricing.cjs"
-    },
-    "./utils/url": {
-      "types": "./utils/url.d.ts",
-      "import": "./utils/url.js",
-      "require": "./utils/url.cjs"
-    },
-    "./utils/permission-mode-mapper": {
-      "types": "./utils/permission-mode-mapper.d.ts",
-      "import": "./utils/permission-mode-mapper.js",
-      "require": "./utils/permission-mode-mapper.cjs"
-    },
-    "./utils/cron": {
-      "types": "./utils/cron.d.ts",
-      "import": "./utils/cron.js",
-      "require": "./utils/cron.cjs"
-    },
-    "./utils/errors": {
-      "types": "./utils/errors.d.ts",
-      "import": "./utils/errors.js",
-      "require": "./utils/errors.cjs"
-    },
-    "./utils/context-window": {
-      "types": "./utils/context-window.d.ts",
-      "import": "./utils/context-window.js",
-      "require": "./utils/context-window.cjs"
-    },
-    "./utils/path": {
-      "types": "./utils/path.d.ts",
-      "import": "./utils/path.js",
-      "require": "./utils/path.cjs"
-    },
-    "./seed": {
-      "types": "./seed/index.d.ts",
-      "import": "./seed/index.js",
-      "require": "./seed/index.cjs"
-    }
-  }
-}
-PKGJSON
+# Use jq to extract exports from source package.json and create a minimal package.json
+jq '{
+  name: "@agor/core",
+  version: "0.1.0",
+  type: "module",
+  main: "./index.js",
+  types: "./index.d.ts",
+  exports: .exports
+}' "$REPO_ROOT/packages/core/package.json" > "$SCRIPT_DIR/dist/core/package.json"
 
 # Copy CLI
 echo "  → Copying CLI..."
