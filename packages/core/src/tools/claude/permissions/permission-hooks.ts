@@ -13,7 +13,6 @@ import type { Message, MessageID, SessionID, TaskID } from '../../../types';
 import { MessageRole, PermissionScope, PermissionStatus, TaskStatus } from '../../../types';
 import type { MessagesService, SessionsService, TasksService } from '../claude-tool';
 
-
 /**
  * Create canUseTool callback for permission handling
  *
@@ -68,7 +67,7 @@ export function createCanUseToolCallback(
 
       // STEP 2: Create lock for this permission check
       console.log(`🔒 [canUseTool] Requesting permission for ${toolName}...`);
-      const newLock = new Promise<void>(resolve => {
+      const newLock = new Promise<void>((resolve) => {
         releaseLock = resolve;
       });
       deps.permissionLocks.set(sessionId, newLock);
@@ -269,7 +268,9 @@ export function createCanUseToolCallback(
       if (releaseLock) {
         releaseLock();
         deps.permissionLocks.delete(sessionId);
-        console.log(`🔓 [canUseTool] Released permission lock for session ${sessionId.substring(0, 8)}`);
+        console.log(
+          `🔓 [canUseTool] Released permission lock for session ${sessionId.substring(0, 8)}`
+        );
       }
     }
   };

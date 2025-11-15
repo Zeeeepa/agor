@@ -10,11 +10,9 @@ import type { User } from '@agor/core/types';
 import { useCallback, useEffect, useState } from 'react';
 import { getDaemonUrl } from '../config/daemon';
 import {
-  ACCESS_TOKEN_KEY,
   clearTokens,
   getStoredAccessToken,
   getStoredRefreshToken,
-  REFRESH_TOKEN_KEY,
   refreshAndStoreTokens,
   storeTokens,
 } from '../utils/tokenRefresh';
@@ -51,7 +49,7 @@ export function useAuth(): UseAuthReturn {
    */
   const reAuthenticate = useCallback(async (retryCount = 0) => {
     const MAX_RETRIES = 5;
-    setState(prev => ({ ...prev, loading: true, error: null }));
+    setState((prev) => ({ ...prev, loading: true, error: null }));
 
     // Move client outside try block so it's accessible in finally
     let client: ReturnType<typeof createClient> | null = null;
@@ -93,7 +91,7 @@ export function useAuth(): UseAuthReturn {
           resolve();
         });
 
-        client.io.once('connect_error', err => {
+        client.io.once('connect_error', (err) => {
           clearTimeout(timeout);
           reject(err);
         });
@@ -180,7 +178,7 @@ export function useAuth(): UseAuthReturn {
         console.log(
           `Connection failed (attempt ${retryCount + 1}/${MAX_RETRIES}), retrying in ${Math.round(delay)}ms...`
         );
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
         return reAuthenticate(retryCount + 1);
       }
 
@@ -295,7 +293,7 @@ export function useAuth(): UseAuthReturn {
             resolve();
           });
 
-          client.io.once('connect_error', err => {
+          client.io.once('connect_error', (err) => {
             clearTimeout(timeout);
             reject(err);
           });
@@ -303,7 +301,7 @@ export function useAuth(): UseAuthReturn {
 
         const refreshResult = await refreshAndStoreTokens(client, refreshToken);
 
-        setState(prev => ({
+        setState((prev) => ({
           ...prev,
           accessToken: refreshResult.accessToken,
           user: refreshResult.user,
@@ -338,7 +336,7 @@ export function useAuth(): UseAuthReturn {
    * Login with email and password
    */
   const login = async (email: string, password: string): Promise<boolean> => {
-    setState(prev => ({ ...prev, loading: true, error: null }));
+    setState((prev) => ({ ...prev, loading: true, error: null }));
 
     let client: ReturnType<typeof createClient> | null = null;
 
@@ -365,7 +363,7 @@ export function useAuth(): UseAuthReturn {
           resolve();
         });
 
-        client.io.once('connect_error', err => {
+        client.io.once('connect_error', (err) => {
           clearTimeout(timeout);
           reject(err);
         });
@@ -410,7 +408,7 @@ export function useAuth(): UseAuthReturn {
       console.error('❌ Login failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Login failed';
       console.error('❌ Error message:', errorMessage);
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         loading: false,
         error: errorMessage,

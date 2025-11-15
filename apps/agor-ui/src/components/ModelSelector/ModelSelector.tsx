@@ -61,6 +61,22 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   // Determine which model list to use based on agentic_tool (with backwards compat for agent prop)
   const effectiveTool = agentic_tool || agent || 'claude-code';
 
+  const modelList =
+    effectiveTool === 'codex'
+      ? CODEX_MODEL_OPTIONS
+      : effectiveTool === 'gemini'
+        ? GEMINI_MODEL_OPTIONS
+        : effectiveTool === 'opencode'
+          ? [] // Not used for OpenCode
+          : AVAILABLE_CLAUDE_MODEL_ALIASES;
+
+  // Determine initial mode based on whether the value is in the aliases list
+  // If no value provided, default to 'alias' mode (recommended)
+  const isValueInAliases = value?.model ? modelList.some((m) => m.id === value.model) : true; // Default to true when no value (will use alias mode)
+
+  const initialMode = value?.mode || (isValueInAliases ? 'alias' : 'exact');
+  const [mode, setMode] = useState<'alias' | 'exact'>(initialMode);
+
   // OpenCode uses a different UI (2 dropdowns: provider + model)
   if (effectiveTool === 'opencode') {
     return (
@@ -85,20 +101,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       />
     );
   }
-
-  const modelList =
-    effectiveTool === 'codex'
-      ? CODEX_MODEL_OPTIONS
-      : effectiveTool === 'gemini'
-        ? GEMINI_MODEL_OPTIONS
-        : AVAILABLE_CLAUDE_MODEL_ALIASES;
-
-  // Determine initial mode based on whether the value is in the aliases list
-  // If no value provided, default to 'alias' mode (recommended)
-  const isValueInAliases = value?.model ? modelList.some(m => m.id === value.model) : true; // Default to true when no value (will use alias mode)
-
-  const initialMode = value?.mode || (isValueInAliases ? 'alias' : 'exact');
-  const [mode, setMode] = useState<'alias' | 'exact'>(initialMode);
 
   const handleModeChange = (newMode: 'alias' | 'exact') => {
     setMode(newMode);
@@ -133,7 +135,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
   return (
     <Space direction="vertical" style={{ width: '100%' }}>
-      <Radio.Group value={mode} onChange={e => handleModeChange(e.target.value)}>
+      <Radio.Group value={mode} onChange={(e) => handleModeChange(e.target.value)}>
         <Space direction="vertical">
           <Radio value="alias">
             <Space>
@@ -150,7 +152,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 value={value?.model || modelList[0].id}
                 onChange={handleModelChange}
                 style={{ width: '100%', minWidth: 400 }}
-                options={modelList.map(m => ({
+                options={modelList.map((m) => ({
                   value: m.id,
                   label: m.id,
                 }))}
@@ -171,7 +173,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             <div style={{ marginLeft: 24, marginTop: 8 }}>
               <Input
                 value={value?.model}
-                onChange={e => handleModelChange(e.target.value)}
+                onChange={(e) => handleModelChange(e.target.value)}
                 placeholder={
                   effectiveTool === 'codex'
                     ? 'e.g., gpt-5-codex'

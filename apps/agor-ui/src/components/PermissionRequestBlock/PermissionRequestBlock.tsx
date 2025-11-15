@@ -223,10 +223,7 @@ export const PermissionRequestBlock: React.FC<PermissionRequestBlockProps> = ({
                 type="primary"
                 icon={<CheckOutlined />}
                 onClick={() =>
-                  onApprove?.(
-                    message.message_id,
-                    remember ? rememberScope : PermissionScope.ONCE
-                  )
+                  onApprove?.(message.message_id, remember ? rememberScope : PermissionScope.ONCE)
                 }
                 style={{ backgroundColor: token.colorSuccess }}
               >
