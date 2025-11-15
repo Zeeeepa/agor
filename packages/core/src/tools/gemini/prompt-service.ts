@@ -402,10 +402,21 @@ export class GeminiPromptService {
               },
               abortController.signal
             );
-            console.debug(`[Gemini Loop] Tool ${toolCall.name} executed successfully`);
+            console.debug(`[Gemini Loop] Tool ${toolCall.name} executed successfully:`, response);
 
-            // Add the response parts from the SDK (already formatted correctly)
-            functionResponseParts.push(...response.responseParts);
+            // In SDK 0.15.1, the response structure changed
+            // ToolCallResponseInfo has { callId, output } instead of { status, result }
+            // Create function response part from the tool call output
+            const responseOutput =
+              typeof response === 'object' && response && 'output' in response
+                ? response.output
+                : response;
+            functionResponseParts.push({
+              functionResponse: {
+                name: toolCall.name,
+                response: responseOutput,
+              },
+            } as Part);
           } catch (error) {
             console.error(`[Gemini Loop] Error executing tool ${toolCall.name}:`, error);
             // On error, create a function response part with the error
