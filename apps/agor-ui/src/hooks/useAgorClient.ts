@@ -9,12 +9,7 @@ import type { AgorClient } from '@agor/core/api';
 import { createClient } from '@agor/core/api';
 import { useEffect, useRef, useState } from 'react';
 import { getDaemonUrl } from '../config/daemon';
-import {
-  ACCESS_TOKEN_KEY,
-  getStoredRefreshToken,
-  REFRESH_TOKEN_KEY,
-  refreshAndStoreTokens,
-} from '../utils/tokenRefresh';
+import { getStoredRefreshToken, refreshAndStoreTokens } from '../utils/tokenRefresh';
 
 interface UseAgorClientResult {
   client: AgorClient | null;
@@ -95,7 +90,7 @@ export function useAgorClient(options: UseAgorClientOptions = {}): UseAgorClient
                 setConnecting(false);
                 setError(null);
                 return;
-              } catch (accessTokenErr) {
+              } catch (_accessTokenErr) {
                 // Access token expired or invalid - try refresh token
                 console.log('Access token failed on reconnect, attempting refresh...');
 
@@ -150,7 +145,7 @@ export function useAgorClient(options: UseAgorClientOptions = {}): UseAgorClient
         }
       });
 
-      client.io.on('disconnect', reason => {
+      client.io.on('disconnect', (reason) => {
         if (mounted) {
           console.log('🔌 Disconnected from daemon:', reason);
           setConnected(false);
@@ -203,7 +198,7 @@ export function useAgorClient(options: UseAgorClientOptions = {}): UseAgorClient
             resolve();
           });
 
-          client.io.once('connect_error', err => {
+          client.io.once('connect_error', (err) => {
             clearTimeout(timeout);
             reject(err);
           });

@@ -21,11 +21,10 @@
 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import bcryptjs from 'bcryptjs';
 import { eq, sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/libsql/migrator';
 import type { Database } from './client';
-import { boards, users } from './schema';
+import { boards } from './schema';
 
 /**
  * Error thrown when migration fails
@@ -68,7 +67,7 @@ async function hasMigrationsTable(db: Database): Promise<boolean> {
  *
  * Safe to run multiple times (idempotent).
  */
-async function bootstrapMigrations(db: Database): Promise<void> {
+async function _bootstrapMigrations(db: Database): Promise<void> {
   try {
     console.log('🔧 Bootstrapping migration tracking...');
 
@@ -156,7 +155,7 @@ export async function checkMigrationStatus(
       // No migrations table = fresh database, all migrations pending
       return {
         hasPending: true,
-        pending: expectedMigrations.map(m => m.tag),
+        pending: expectedMigrations.map((m) => m.tag),
         applied: [],
       };
     }
@@ -180,19 +179,19 @@ export async function checkMigrationStatus(
       return {
         hasPending: false,
         pending: [],
-        applied: expectedMigrations.map(m => m.tag),
+        applied: expectedMigrations.map((m) => m.tag),
       };
     }
 
     // Find pending migrations (hash not in database, after normalization)
     const pending = expectedMigrations
-      .filter(m => !normalizedAppliedHashes.includes(m.hash))
-      .map(m => m.tag);
+      .filter((m) => !normalizedAppliedHashes.includes(m.hash))
+      .map((m) => m.tag);
 
     // Find applied migration tags (hash exists in database, after normalization)
     const appliedTags = expectedMigrations
-      .filter(m => normalizedAppliedHashes.includes(m.hash))
-      .map(m => m.tag);
+      .filter((m) => normalizedAppliedHashes.includes(m.hash))
+      .map((m) => m.tag);
 
     return {
       hasPending: pending.length > 0,

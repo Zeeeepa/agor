@@ -274,7 +274,10 @@ export class OpenCodeClient {
       try {
         data = await response.json();
         // Log summary instead of full response to avoid log truncation
-        console.log('[OpenCode] Response received (keys):', data && typeof data === 'object' ? Object.keys(data) : typeof data);
+        console.log(
+          '[OpenCode] Response received (keys):',
+          data && typeof data === 'object' ? Object.keys(data) : typeof data
+        );
       } catch (parseError) {
         // If response body is empty or not JSON, return success message
         const text = await response.text();
@@ -308,12 +311,12 @@ export class OpenCodeClient {
 
           // Extract text parts
           const textParts = parts
-            .filter(part => part.type === 'text' && typeof part.text === 'string')
-            .map(part => part.text as string);
+            .filter((part) => part.type === 'text' && typeof part.text === 'string')
+            .map((part) => part.text as string);
           text = textParts.join('\n');
 
           // Extract metadata from step-finish part
-          const stepFinish = parts.find(part => part.type === 'step-finish');
+          const stepFinish = parts.find((part) => part.type === 'step-finish');
           if (stepFinish) {
             if (typeof stepFinish.cost === 'number') {
               metadata.cost = stepFinish.cost;

@@ -5,12 +5,11 @@
  * Supports 75+ LLM providers with privacy-first architecture.
  */
 
-export { OpenCodeClient } from './client';
 export type {
   OpenCodeConfig,
   OpenCodeMessageEvent,
   OpenCodeSession,
 } from './client';
-
-export { OpenCodeTool } from './opencode-tool';
+export { OpenCodeClient } from './client';
 export type { OpenCodeConfig as OpenCodeToolConfig } from './opencode-tool';
+export { OpenCodeTool } from './opencode-tool';

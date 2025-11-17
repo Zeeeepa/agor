@@ -12,8 +12,8 @@
 
 import { theme } from 'antd';
 import type React from 'react';
-import { CollapsibleText } from '../../CollapsibleText';
 import { TEXT_TRUNCATION } from '../../../constants/ui';
+import { CollapsibleText } from '../../CollapsibleText';
 import type { ToolRendererProps } from './index';
 
 /**
@@ -39,7 +39,7 @@ export const ExampleCustomRenderer: React.FC<ToolRendererProps> = ({
     if (Array.isArray(result.content)) {
       return result.content
         .filter((block: any): block is { type: 'text'; text: string } => block.type === 'text')
-        .map(block => block.text)
+        .map((block) => block.text)
         .join('\n\n');
     }
 
@@ -78,9 +78,7 @@ export const ExampleCustomRenderer: React.FC<ToolRendererProps> = ({
             {resultText}
           </CollapsibleText>
         ) : (
-          <div style={{ fontStyle: 'italic', color: token.colorTextSecondary }}>
-            (no output)
-          </div>
+          <div style={{ fontStyle: 'italic', color: token.colorTextSecondary }}>(no output)</div>
         )}
       </div>
 

@@ -12,7 +12,7 @@ import {
   InfoCircleOutlined,
   LoadingOutlined,
 } from '@ant-design/icons';
-import { Alert, Button, Form, Input, Space, Spin, Switch, message, theme, Tooltip } from 'antd';
+import { Alert, Button, Form, Input, message, Space, Spin, Switch, Tooltip, theme } from 'antd';
 import { useEffect, useState } from 'react';
 
 export interface OpenCodeTabProps {
@@ -262,7 +262,8 @@ export const OpenCodeTab: React.FC<OpenCodeTabProps> = ({ client }) => {
         <h4>About OpenCode</h4>
         <ul style={{ fontSize: 12, lineHeight: 1.8, color: token.colorTextSecondary }}>
           <li>
-            <strong>Multi-Provider Support:</strong> Access Claude, GPT-4, Gemini, and 70+ other models
+            <strong>Multi-Provider Support:</strong> Access Claude, GPT-4, Gemini, and 70+ other
+            models
           </li>
           <li>
             <strong>Privacy-First:</strong> All code and context stays local - no cloud storage

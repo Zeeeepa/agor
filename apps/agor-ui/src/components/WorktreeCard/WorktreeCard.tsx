@@ -138,13 +138,13 @@ const WorktreeCard = ({
 
   // Separate manual sessions from scheduled runs
   const manualSessions = useMemo(
-    () => sessions.filter(s => !s.scheduled_from_worktree),
+    () => sessions.filter((s) => !s.scheduled_from_worktree),
     [sessions]
   );
   const scheduledSessions = useMemo(
     () =>
       sessions
-        .filter(s => s.scheduled_from_worktree)
+        .filter((s) => s.scheduled_from_worktree)
         .sort((a, b) => (b.scheduled_run_at || 0) - (a.scheduled_run_at || 0)), // Most recent first
     [sessions]
   );
@@ -153,13 +153,13 @@ const WorktreeCard = ({
   const sessionTreeData = useMemo(() => buildSessionTree(manualSessions), [manualSessions]);
 
   // Check if any session is running
-  const hasRunningSession = useMemo(() => sessions.some(s => s.status === 'running'), [sessions]);
+  const hasRunningSession = useMemo(() => sessions.some((s) => s.status === 'running'), [sessions]);
 
   // Check if worktree needs attention (newly created OR has ready sessions)
   // Don't highlight if a session from this worktree is currently open in the drawer
   const needsAttention = useMemo(() => {
-    const hasReadySession = sessions.some(s => s.ready_for_prompt === true);
-    const hasOpenSession = sessions.some(s => s.session_id === selectedSessionId);
+    const hasReadySession = sessions.some((s) => s.ready_for_prompt === true);
+    const hasOpenSession = sessions.some((s) => s.session_id === selectedSessionId);
     const shouldHighlight = (worktree.needs_attention || hasReadySession) && !hasOpenSession;
 
     return shouldHighlight;
@@ -244,7 +244,7 @@ const WorktreeCard = ({
           boxShadow: session.ready_for_prompt ? `0 0 12px ${token.colorPrimary}30` : undefined,
         }}
         onClick={() => onSessionClick?.(session.session_id)}
-        onContextMenu={e => {
+        onContextMenu={(e) => {
           // Show fork/spawn menu on right-click if handlers exist
           if (onForkSession || onSpawnSession) {
             e.preventDefault();
@@ -302,7 +302,7 @@ const WorktreeCard = ({
     <Tree
       treeData={sessionTreeData}
       expandedKeys={expandedKeys}
-      onExpand={keys => setExpandedKeys(keys as React.Key[])}
+      onExpand={(keys) => setExpandedKeys(keys as React.Key[])}
       showLine
       showIcon={false}
       selectable={false}
@@ -338,7 +338,7 @@ const WorktreeCard = ({
             size="small"
             icon={<PlusOutlined />}
             disabled={connectionDisabled}
-            onClick={e => {
+            onClick={(e) => {
               e.stopPropagation();
               onCreateSession(worktree.worktree_id);
             }}
@@ -375,7 +375,7 @@ const WorktreeCard = ({
   // Scheduled runs content (flat list, no genealogy tree needed)
   const scheduledRunsContent = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {scheduledSessions.map(session => (
+      {scheduledSessions.map((session) => (
         <div
           key={session.session_id}
           style={{
@@ -511,7 +511,7 @@ const WorktreeCard = ({
             {isPinned && zoneName && (
               <Tag
                 icon={<PushpinFilled style={{ color: zoneColor }} />}
-                onClick={e => {
+                onClick={(e) => {
                   e.stopPropagation();
                   onUnpin?.(worktree.worktree_id);
                 }}
@@ -538,7 +538,7 @@ const WorktreeCard = ({
                 type="text"
                 size="small"
                 icon={<CodeOutlined />}
-                onClick={e => {
+                onClick={(e) => {
                   e.stopPropagation();
                   onOpenTerminal([`cd ${worktree.path}`], worktree.worktree_id);
                 }}
@@ -550,7 +550,7 @@ const WorktreeCard = ({
                 type="text"
                 size="small"
                 icon={<EditOutlined />}
-                onClick={e => {
+                onClick={(e) => {
                   e.stopPropagation();
                   onOpenSettings(worktree.worktree_id);
                 }}
@@ -563,7 +563,7 @@ const WorktreeCard = ({
                 size="small"
                 icon={<DeleteOutlined />}
                 disabled={connectionDisabled}
-                onClick={e => {
+                onClick={(e) => {
                   e.stopPropagation();
                   setArchiveDeleteModalOpen(true);
                 }}
@@ -628,7 +628,7 @@ const WorktreeCard = ({
                 type="primary"
                 icon={<PlusOutlined />}
                 disabled={connectionDisabled}
-                onClick={e => {
+                onClick={(e) => {
                   e.stopPropagation();
                   onCreateSession(worktree.worktree_id);
                 }}
@@ -697,7 +697,7 @@ const WorktreeCard = ({
         worktree={worktree}
         sessionCount={sessions.length}
         environmentRunning={worktree.environment_instance?.status === 'running'}
-        onConfirm={options => {
+        onConfirm={(options) => {
           onArchiveOrDelete?.(worktree.worktree_id, options);
           setArchiveDeleteModalOpen(false);
         }}

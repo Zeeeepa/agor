@@ -13,9 +13,9 @@
  */
 
 import type { AgorClient } from '@agor/core/api';
-import type { Message, PermissionScope, SessionID, User } from '@agor/core/types';
+import type { PermissionScope, SessionID, User } from '@agor/core/types';
 import { Alert, Spin, Typography, theme } from 'antd';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useStreamingMessages, useTasks } from '../../hooks';
 import { TaskBlock } from '../TaskBlock';
 
@@ -129,7 +129,7 @@ export const ConversationView = React.memo<ConversationViewProps>(
     }, [onScrollRef, scrollToBottom]);
 
     // Fetch tasks for this session
-    const currentUser = users.find(u => u.user_id === currentUserId) || null;
+    const currentUser = users.find((u) => u.user_id === currentUserId) || null;
     const {
       tasks,
       loading: tasksLoading,
@@ -154,7 +154,7 @@ export const ConversationView = React.memo<ConversationViewProps>(
     useEffect(() => {
       if (tasks.length > 0) {
         const lastTaskId = tasks[tasks.length - 1].task_id;
-        setExpandedTaskIds(prev => {
+        setExpandedTaskIds((prev) => {
           // If no tasks expanded or last task changed, expand the last task
           if (prev.size === 0 || !prev.has(lastTaskId)) {
             // Scroll to bottom after expansion is rendered
@@ -170,7 +170,7 @@ export const ConversationView = React.memo<ConversationViewProps>(
 
     // Handle task expand/collapse
     const handleTaskExpandChange = useCallback((taskId: string, expanded: boolean) => {
-      setExpandedTaskIds(prev => {
+      setExpandedTaskIds((prev) => {
         const next = new Set(prev);
         if (expanded) {
           next.add(taskId);
@@ -242,7 +242,7 @@ export const ConversationView = React.memo<ConversationViewProps>(
         }}
       >
         {/* Task-organized conversation */}
-        {tasks.map(task => (
+        {tasks.map((task) => (
           <TaskBlock
             key={task.task_id}
             task={task}
@@ -252,7 +252,7 @@ export const ConversationView = React.memo<ConversationViewProps>(
             users={users}
             currentUserId={currentUserId}
             isExpanded={expandedTaskIds.has(task.task_id)}
-            onExpandChange={expanded => handleTaskExpandChange(task.task_id, expanded)}
+            onExpandChange={(expanded) => handleTaskExpandChange(task.task_id, expanded)}
             sessionId={sessionId}
             onPermissionDecision={onPermissionDecision}
             worktreeName={worktreeName}

@@ -11,7 +11,7 @@ import type { SessionID } from '@agor/core/types';
 
 // Constants for file search
 const MAX_FILE_RESULTS = 10;
-const MAX_USER_RESULTS = 5;
+const _MAX_USER_RESULTS = 5;
 
 interface FileSearchQuery {
   sessionId: SessionID;

@@ -13,16 +13,7 @@ import { ENVIRONMENT } from '@agor/core/config';
 import { type Database, WorktreeRepository } from '@agor/core/db';
 import type { Application } from '@agor/core/feathers';
 import { cleanWorktree, removeWorktree } from '@agor/core/git';
-import { renderTemplate } from '@agor/core/templates/handlebars-helpers';
-import type {
-  BoardEntityObject,
-  BoardID,
-  QueryParams,
-  Repo,
-  UUID,
-  Worktree,
-  WorktreeID,
-} from '@agor/core/types';
+import type { BoardID, QueryParams, Repo, UUID, Worktree, WorktreeID } from '@agor/core/types';
 import { getNextRunTime, validateCron } from '@agor/core/utils/cron';
 import { DrizzleService } from '../adapters/drizzle';
 
@@ -227,7 +218,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
         .then(() => {
           console.log(`✅ Worktree removed from filesystem successfully`);
         })
-        .catch(error => {
+        .catch((error) => {
           console.error(
             `⚠️  Failed to remove worktree from filesystem:`,
             error instanceof Error ? error.message : String(error)
@@ -262,9 +253,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
 
     // Stop environment if running
     if (worktree.environment_instance?.status === 'running') {
-      console.log(
-        `⚠️  Stopping environment for worktree ${worktree.name} before ${metadataAction}`
-      );
+      console.log(`⚠️  Stopping environment for worktree ${worktree.name} before ${metadataAction}`);
       try {
         await this.stopEnvironment(id, params);
       } catch (error) {
@@ -584,7 +573,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
           stdio: 'inherit', // Show output directly in daemon logs
         });
 
-        childProcess.on('exit', code => {
+        childProcess.on('exit', (code) => {
           if (code === 0) {
             console.log(`✅ Start command completed successfully for ${worktree.name}`);
             resolve();
@@ -663,7 +652,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
             stdio: 'inherit',
           });
 
-          stopProcess.on('exit', code => {
+          stopProcess.on('exit', (code) => {
             if (code === 0) {
               resolve();
             } else {
@@ -735,7 +724,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       await this.stopEnvironment(id, params);
 
       // Wait a bit for processes to clean up
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
     // Start
@@ -747,7 +736,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
    */
   async checkHealth(id: WorktreeID, params?: WorktreeParams): Promise<Worktree> {
     const worktree = await this.get(id, params);
-    const repo = (await this.app.service('repos').get(worktree.repo_id)) as Repo;
+    const _repo = (await this.app.service('repos').get(worktree.repo_id)) as Repo;
 
     // Only check health for 'running' or 'starting' status
     const currentStatus = worktree.environment_instance?.status;
@@ -934,7 +923,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
           stderr += data.toString();
         });
 
-        childProcess.on('exit', code => {
+        childProcess.on('exit', (code) => {
           clearTimeout(timeout);
           if (code === 0 || stdout.length > 0) {
             resolve({ stdout, stderr, truncated });
@@ -943,7 +932,7 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
           }
         });
 
-        childProcess.on('error', error => {
+        childProcess.on('error', (error) => {
           clearTimeout(timeout);
           reject(error);
         });
@@ -983,30 +972,6 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
-  }
-
-  /**
-   * Build template context for Handlebars rendering
-   */
-  private buildTemplateContext(worktree: Worktree, repo: Repo) {
-    let customContext = {};
-    try {
-      customContext = worktree.custom_context || {};
-    } catch {
-      // Invalid custom context, use empty object
-    }
-
-    return {
-      worktree: {
-        unique_id: worktree.worktree_unique_id,
-        name: worktree.name,
-        path: worktree.path,
-      },
-      repo: {
-        slug: repo.slug,
-      },
-      custom: customContext,
-    };
   }
 }
 

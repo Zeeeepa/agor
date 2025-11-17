@@ -1,9 +1,4 @@
-import type {
-  CodexApprovalPolicy,
-  CodexSandboxMode,
-  MCPServer,
-  Session,
-} from '@agor/core/types';
+import type { CodexApprovalPolicy, CodexSandboxMode, MCPServer, Session } from '@agor/core/types';
 import { DownOutlined } from '@ant-design/icons';
 import { Collapse, Form, Modal, Typography } from 'antd';
 import React from 'react';
@@ -99,7 +94,7 @@ export const SessionSettingsModal: React.FC<SessionSettingsModalProps> = ({
   ]);
 
   const handleOk = () => {
-    form.validateFields().then(values => {
+    form.validateFields().then((values) => {
       // Collect all updates
       const updates: Partial<Session> = {};
 
@@ -135,9 +130,7 @@ export const SessionSettingsModal: React.FC<SessionSettingsModalProps> = ({
           session.permission_config?.codex?.approvalPolicy ||
           'on-request';
         const networkAccess =
-          values.codexNetworkAccess ??
-          session.permission_config?.codex?.networkAccess ??
-          false;
+          values.codexNetworkAccess ?? session.permission_config?.codex?.networkAccess ?? false;
 
         updates.permission_config = {
           ...session.permission_config,

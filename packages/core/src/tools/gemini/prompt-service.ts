@@ -14,7 +14,6 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  ApprovalMode,
   AuthType,
   Config,
   executeToolCall,
@@ -23,7 +22,7 @@ import {
   MCPServerConfig,
   type ResumedSessionData,
 } from '@google/gemini-cli-core';
-import type { Content, Part } from '@google/genai';
+import type { Part } from '@google/genai';
 import { getDaemonUrl, resolveApiKey, resolveUserEnvironment } from '../../config';
 import type { Database } from '../../db/client';
 import type { MCPServerRepository } from '../../db/repositories/mcp-servers';
@@ -472,7 +471,7 @@ export class GeminiPromptService {
       // Find session file matching pattern: session-*-{sessionId-first8}.json
       const sessionIdShort = sessionId.slice(0, 8);
       const files = await fs.readdir(chatsDir);
-      const sessionFile = files.find(f => f.includes(sessionIdShort) && f.endsWith('.json'));
+      const sessionFile = files.find((f) => f.includes(sessionIdShort) && f.endsWith('.json'));
 
       if (!sessionFile) {
         console.debug(`No session file found for ${sessionId} (looking for *${sessionIdShort}*)`);

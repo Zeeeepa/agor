@@ -207,9 +207,7 @@ export const TerminalModal: React.FC<TerminalModalProps> = ({
         <div>
           Terminal{sessionInfo.worktreeName ? ` - ${sessionInfo.worktreeName}` : ''}{' '}
           <span style={{ fontSize: '12px', fontWeight: 'normal', opacity: 0.6 }}>
-            {sessionInfo.tmuxSession
-              ? `(tmux: ${sessionInfo.tmuxSession})`
-              : '(ephemeral session)'}
+            {sessionInfo.tmuxSession ? `(tmux: ${sessionInfo.tmuxSession})` : '(ephemeral session)'}
           </span>
         </div>
       }

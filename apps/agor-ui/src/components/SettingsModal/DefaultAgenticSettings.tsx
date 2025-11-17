@@ -7,7 +7,7 @@
 
 import type { AgenticToolName, DefaultAgenticConfig, MCPServer } from '@agor/core/types';
 import { getDefaultPermissionMode } from '@agor/core/types';
-import { Button, Form, Space, Tabs, Typography, message } from 'antd';
+import { Button, Form, message, Space, Tabs, Typography } from 'antd';
 import { useState } from 'react';
 import { AgenticToolConfigForm } from '../AgenticToolConfigForm';
 
@@ -75,7 +75,7 @@ export const DefaultAgenticSettings: React.FC<DefaultAgenticSettingsProps> = ({
   };
 
   const handleSave = async (tool: AgenticToolName) => {
-    setSaving(prev => ({ ...prev, [tool]: true }));
+    setSaving((prev) => ({ ...prev, [tool]: true }));
     try {
       const currentForm = getFormForTool(tool);
       const values = currentForm.getFieldsValue();
@@ -101,7 +101,7 @@ export const DefaultAgenticSettings: React.FC<DefaultAgenticSettingsProps> = ({
       message.error('Failed to save settings');
       console.error('Error saving default agentic settings:', error);
     } finally {
-      setSaving(prev => ({ ...prev, [tool]: false }));
+      setSaving((prev) => ({ ...prev, [tool]: false }));
     }
   };
 
@@ -161,13 +161,22 @@ export const DefaultAgenticSettings: React.FC<DefaultAgenticSettingsProps> = ({
 
       <Tabs
         activeKey={activeTab}
-        onChange={key => setActiveTab(key as AgenticToolName)}
+        onChange={(key) => setActiveTab(key as AgenticToolName)}
         items={tabItems.map(({ key, label, tool, form }) => ({
           key,
           label,
           children: (
-            <Form form={form} layout="vertical" initialValues={getInitialValues(tool)} style={{ paddingTop: 16 }}>
-              <AgenticToolConfigForm agenticTool={tool} mcpServers={mcpServers} showHelpText={false} />
+            <Form
+              form={form}
+              layout="vertical"
+              initialValues={getInitialValues(tool)}
+              style={{ paddingTop: 16 }}
+            >
+              <AgenticToolConfigForm
+                agenticTool={tool}
+                mcpServers={mcpServers}
+                showHelpText={false}
+              />
 
               <Space style={{ marginTop: 16 }}>
                 <Button onClick={() => handleClear(tool)}>Clear Defaults</Button>
