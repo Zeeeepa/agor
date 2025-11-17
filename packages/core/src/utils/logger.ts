@@ -56,7 +56,7 @@ export function patchConsole() {
   };
 
   console.log = (...args: unknown[]) => {
-    if (shouldLog('debug')) originalLog(...args);
+    if (shouldLog('info')) originalLog(...args);
   };
 
   console.info = (...args: unknown[]) => {

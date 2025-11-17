@@ -1,7 +1,8 @@
 {
   "name": "agor",
-  "version": "0.7.1",
+  "version": "0.1.0",
   "private": true,
+  "//": "This is the monorepo root. Published package version is in packages/agor-live/package.json",
   "description": "Next-gen agent orchestration platform",
   "keywords": [
     "ai",
