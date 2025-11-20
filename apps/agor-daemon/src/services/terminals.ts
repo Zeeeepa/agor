@@ -17,7 +17,7 @@ import os from 'node:os';
 import { resolveUserEnvironment } from '@agor/core/config';
 import { type Database, WorktreeRepository } from '@agor/core/db';
 import type { Application } from '@agor/core/feathers';
-import type { UserID, WorktreeID } from '@agor/core/types';
+import type { AuthenticatedParams, UserID, WorktreeID } from '@agor/core/types';
 import type { IPty } from '@homebridge/node-pty-prebuilt-multiarch';
 import * as pty from '@homebridge/node-pty-prebuilt-multiarch';
 
@@ -94,6 +94,14 @@ function findTmuxWindow(sessionName: string, windowName: string): number | null 
   }
 }
 
+function sanitizeTmuxName(value: string, fallback: string): string {
+  const sanitized = value
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return sanitized.length > 0 ? sanitized : fallback;
+}
+
 /**
  * Terminals service - manages PTY sessions
  */
@@ -118,7 +126,10 @@ export class TerminalsService {
   /**
    * Create a new terminal session
    */
-  async create(data: CreateTerminalData): Promise<{
+  async create(
+    data: CreateTerminalData,
+    params?: AuthenticatedParams
+  ): Promise<{
     terminalId: string;
     cwd: string;
     tmuxSession?: string;
@@ -141,6 +152,10 @@ export class TerminalsService {
       }
     }
 
+    const authenticatedUserId = params?.user?.user_id as UserID | undefined;
+    const requestUserId = data.userId as UserID | undefined;
+    const effectiveUserId = authenticatedUserId ?? requestUserId;
+
     // Determine shell and tmux configuration
     let shell: string;
     let shellArgs: string[] = [];
@@ -148,16 +163,17 @@ export class TerminalsService {
     let tmuxReused = false;
 
     if (this.hasTmux && worktree) {
-      // Use single shared tmux session with one window per worktree
-      tmuxSession = 'agor';
+      const userSessionName = effectiveUserId ? `agor-${effectiveUserId.substring(0, 8)}` : 'agor';
+      tmuxSession = sanitizeTmuxName(userSessionName, 'agor');
       const sessionExists = tmuxSessionExists(tmuxSession);
       const windowName = worktreeName || 'unnamed';
+      const tmuxWindowName = sanitizeTmuxName(windowName, 'worktree');
 
       shell = 'tmux';
 
       if (sessionExists) {
         // Session exists - check if this worktree has a window
-        const windowIndex = findTmuxWindow(tmuxSession, windowName);
+        const windowIndex = findTmuxWindow(tmuxSession, tmuxWindowName);
 
         if (windowIndex !== null) {
           // Window exists - attach and select it
@@ -175,7 +191,7 @@ export class TerminalsService {
             ';',
             'new-window',
             '-n',
-            windowName,
+            tmuxWindowName,
             '-c',
             cwd,
           ];
@@ -192,7 +208,7 @@ export class TerminalsService {
           '-s',
           tmuxSession,
           '-n',
-          windowName,
+          tmuxWindowName,
           '-c',
           cwd,
           ';',
@@ -214,10 +230,10 @@ export class TerminalsService {
 
     // Resolve environment with user env vars if userId provided
     let env: Record<string, string> = process.env as Record<string, string>;
-    if (data.userId) {
-      env = await resolveUserEnvironment(data.userId, this.db);
+    if (effectiveUserId) {
+      env = await resolveUserEnvironment(effectiveUserId, this.db);
       console.log(
-        `🔐 Loaded ${Object.keys(env).length} env vars for user ${data.userId.substring(0, 8)}`
+        `🔐 Loaded ${Object.keys(env).length} env vars for user ${effectiveUserId.substring(0, 8)}`
       );
     }
 
@@ -236,7 +252,7 @@ export class TerminalsService {
       pty: ptyProcess,
       shell,
       cwd,
-      userId: data.userId,
+      userId: effectiveUserId,
       worktreeId: data.worktreeId,
       tmuxSession,
       createdAt: new Date(),
