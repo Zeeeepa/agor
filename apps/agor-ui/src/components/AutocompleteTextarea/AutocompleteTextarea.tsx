@@ -230,15 +230,10 @@ export const AutocompleteTextarea = React.forwardRef<
         setIsLoading(true);
 
         try {
-          console.log('[AutocompleteTextarea] Calling files service:', {
-            sessionId,
-            search: searchQuery,
-          });
           const result = await client.service('files').find({
             query: { sessionId, search: searchQuery },
           });
 
-          console.log('[AutocompleteTextarea] Got result:', result);
           setFileResults(
             Array.isArray(result) ? (result as FileResult[]) : (result?.data as FileResult[]) || []
           );
@@ -383,6 +378,7 @@ export const AutocompleteTextarea = React.forwardRef<
           setQuery(colonTrigger.query);
           setTriggerIndex(colonTrigger.triggerIndex);
           setFileResults([]);
+          setIsLoading(false); // Reset loading state when switching to emoji trigger
 
           // Instant emoji search (no debounce needed)
           const emojis = searchEmojis(colonTrigger.query);

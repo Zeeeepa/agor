@@ -170,7 +170,6 @@ const EMOJI_DATA: EmojiOption[] = [
   { shortcode: 'sun', emoji: '☀️', keywords: ['sunny', 'day'] },
   { shortcode: 'partly_sunny', emoji: '⛅', keywords: ['cloud', 'weather'] },
   { shortcode: 'cloud', emoji: '☁️', keywords: ['weather'] },
-  { shortcode: 'zap', emoji: '⚡', keywords: ['lightning', 'thunder'] },
   { shortcode: 'snowflake', emoji: '❄️', keywords: ['cold', 'winter'] },
   { shortcode: 'rainbow', emoji: '🌈', keywords: ['colorful'] },
 
@@ -242,9 +241,7 @@ const EMOJI_DATA: EmojiOption[] = [
   { shortcode: 'camera', emoji: '📷', keywords: ['photo'] },
 
   // Developer-specific
-  { shortcode: 'bug', emoji: '🐛', keywords: ['debug', 'error'] },
   { shortcode: 'construction', emoji: '🚧', keywords: ['wip', 'progress'] },
-  { shortcode: 'package', emoji: '📦', keywords: ['npm', 'module'] },
   { shortcode: 'recycle', emoji: '♻️', keywords: ['refactor'] },
   { shortcode: 'test_tube', emoji: '🧪', keywords: ['test', 'experiment'] },
   { shortcode: 'microscope', emoji: '🔬', keywords: ['science', 'test'] },
