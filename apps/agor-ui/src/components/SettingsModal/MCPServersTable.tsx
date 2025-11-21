@@ -1,5 +1,6 @@
 import type { CreateMCPServerInput, MCPServer, UpdateMCPServerInput } from '@agor/core/types';
 import { DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined } from '@ant-design/icons';
+import type { FormInstance } from 'antd';
 import {
   Badge,
   Button,
@@ -7,6 +8,7 @@ import {
   Form,
   Input,
   Modal,
+  message,
   Popconfirm,
   Select,
   Space,
@@ -35,6 +37,7 @@ interface MCPServerFormFieldsProps {
   onTransportChange?: (transport: 'stdio' | 'http' | 'sse') => void;
   authType?: 'none' | 'bearer' | 'jwt';
   onAuthTypeChange?: (authType: 'none' | 'bearer' | 'jwt') => void;
+  form: FormInstance;
 }
 
 const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
@@ -43,7 +46,65 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
   onTransportChange,
   authType = 'none',
   onAuthTypeChange,
+  form,
 }) => {
+  const [testing, setTesting] = useState(false);
+
+  const handleTestConnection = async () => {
+    const values = form.getFieldsValue();
+    const currentAuthType = values.auth_type || authType;
+
+    setTesting(true);
+    try {
+      if (currentAuthType === 'jwt') {
+        const apiUrl = values.jwt_api_url;
+        const apiToken = values.jwt_api_token;
+        const apiSecret = values.jwt_api_secret;
+
+        if (!apiUrl || !apiToken || !apiSecret) {
+          message.error('Please fill in all JWT authentication fields');
+          return;
+        }
+
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: apiToken,
+            secret: apiSecret,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        if (data.access_token) {
+          message.success('JWT authentication successful - access token received');
+        } else {
+          message.warning('Response received but no access_token found');
+        }
+      } else if (currentAuthType === 'bearer') {
+        const token = values.auth_token;
+        if (token) {
+          message.success('Bearer token configured');
+        } else {
+          message.warning('No bearer token provided');
+        }
+      } else {
+        message.info('No auth configured');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      message.error(`Connection test failed: ${errorMessage}`);
+    } finally {
+      setTesting(false);
+    }
+  };
+
   return (
     <>
       {mode === 'create' && (
@@ -171,6 +232,12 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
               </Form.Item>
             </>
           )}
+
+          <Form.Item>
+            <Button type="default" loading={testing} onClick={handleTestConnection}>
+              Test Connection
+            </Button>
+          </Form.Item>
         </>
       )}
 
@@ -488,6 +555,7 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
             onTransportChange={setTransport}
             authType={authType}
             onAuthTypeChange={setAuthType}
+            form={form}
           />
         </Form>
       </Modal>
@@ -512,6 +580,7 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
             transport={editingServer?.transport}
             authType={authType}
             onAuthTypeChange={setAuthType}
+            form={form}
           />
         </Form>
       </Modal>
