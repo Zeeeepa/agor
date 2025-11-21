@@ -66,26 +66,43 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
           return;
         }
 
-        const response = await fetch(apiUrl, {
+        // Call daemon to test JWT auth (avoids CORS issues)
+        const daemonUrl = import.meta.env.VITE_DAEMON_URL || 'http://localhost:3030';
+        const mcpUrl = values.url;
+        const response = await fetch(`${daemonUrl}/mcp-servers/test-jwt`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
+          credentials: 'include',
           body: JSON.stringify({
-            name: apiToken,
-            secret: apiSecret,
+            api_url: apiUrl,
+            api_token: apiToken,
+            api_secret: apiSecret,
+            mcp_url: mcpUrl,
           }),
         });
 
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
         }
 
         const data = await response.json();
-        if (data.access_token) {
-          message.success('JWT authentication successful - access token received');
+        if (data.success) {
+          if (data.serverName || data.toolCount !== undefined) {
+            const toolInfo = data.toolCount ? ` - ${data.toolCount} tools` : '';
+            const toolNames = data.tools?.length ? `: ${data.tools.join(', ')}` : '';
+            message.success(
+              `Connected to ${data.serverName || 'MCP server'}${toolInfo}${toolNames}`
+            );
+          } else if (data.mcpError) {
+            message.warning(`JWT valid but MCP connection failed: ${data.mcpError}`);
+          } else {
+            message.success('JWT authentication successful');
+          }
         } else {
-          message.warning('Response received but no access_token found');
+          message.warning(data.error || 'Response received but token validation failed');
         }
       } else if (currentAuthType === 'bearer') {
         const token = values.auth_token;

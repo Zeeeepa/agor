@@ -762,6 +762,123 @@ async function main() {
 
   app.use('/mcp-servers', createMCPServersService(db));
 
+  // JWT test endpoint for MCP servers (server-side to avoid CORS)
+  app.use('/mcp-servers/test-jwt', {
+    async create(data: {
+      api_url: string;
+      api_token: string;
+      api_secret: string;
+      mcp_url?: string;
+    }) {
+      try {
+        // Step 1: Get JWT token
+        const response = await fetch(data.api_url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: data.api_token, secret: data.api_secret }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          return {
+            success: false,
+            error: `JWT fetch failed: HTTP ${response.status}: ${errorText}`,
+          };
+        }
+
+        const result = (await response.json()) as {
+          access_token?: string;
+          payload?: { access_token?: string };
+        };
+        const token = result.access_token || result.payload?.access_token;
+        if (!token) {
+          return { success: false, error: 'Response missing access_token' };
+        }
+
+        // Step 2: If MCP URL provided, try to connect and get capabilities
+        if (data.mcp_url) {
+          try {
+            // Use spawn to run mcp-remote and get tools list
+            const { spawn } = await import('node:child_process');
+            const mcpResult = await new Promise<{
+              serverName?: string;
+              tools?: string[];
+              error?: string;
+            }>((resolve) => {
+              const proc = spawn('npx', [
+                'mcp-remote',
+                data.mcp_url!,
+                '--header',
+                `Authorization: Bearer ${token}`,
+                '--one-shot',
+              ]);
+
+              let stdout = '';
+              let stderr = '';
+              const timeout = setTimeout(() => {
+                proc.kill();
+                resolve({ error: 'Connection timed out after 10s' });
+              }, 10000);
+
+              proc.stdout.on('data', (chunk) => {
+                stdout += chunk.toString();
+              });
+              proc.stderr.on('data', (chunk) => {
+                stderr += chunk.toString();
+              });
+              proc.on('close', (code) => {
+                clearTimeout(timeout);
+                if (code === 0 && stdout) {
+                  try {
+                    const info = JSON.parse(stdout);
+                    resolve({
+                      serverName: info.serverInfo?.name,
+                      tools: info.tools?.map((t: { name: string }) => t.name),
+                    });
+                  } catch {
+                    resolve({ serverName: 'Connected', tools: [] });
+                  }
+                } else {
+                  resolve({ error: stderr || 'MCP connection failed' });
+                }
+              });
+              proc.on('error', (err) => {
+                clearTimeout(timeout);
+                resolve({ error: err.message });
+              });
+            });
+
+            if (mcpResult.error) {
+              return {
+                success: true,
+                tokenValid: true,
+                mcpError: mcpResult.error,
+              };
+            }
+
+            return {
+              success: true,
+              tokenValid: true,
+              serverName: mcpResult.serverName,
+              toolCount: mcpResult.tools?.length || 0,
+              tools: mcpResult.tools?.slice(0, 10), // First 10 tools
+            };
+          } catch (mcpError) {
+            return {
+              success: true,
+              tokenValid: true,
+              mcpError: mcpError instanceof Error ? mcpError.message : String(mcpError),
+            };
+          }
+        }
+
+        return { success: true, tokenValid: true };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+  });
+
   // Register config service for API key management
   app.use('/config', createConfigService());
 
