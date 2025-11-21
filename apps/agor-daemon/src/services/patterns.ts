@@ -12,19 +12,20 @@
  * - Pattern suggestions for workflows
  */
 
-import {
-  PatternApplicationsRepository,
-  PatternsRepository,
-  type Database,
-} from '@agor/core/db';
+import { type Database, PatternApplicationsRepository, PatternsRepository } from '@agor/core/db';
 import type {
+  AuthenticatedParams,
   Pattern,
   PatternApplication,
   PatternCategory,
+  PatternID,
   PatternOutcome,
   PatternSearchOptions,
   PatternSuggestion,
   QueryParams,
+  SessionID,
+  TaskID,
+  WorktreeID,
 } from '@agor/core/types';
 import { DrizzleService } from '../adapters/drizzle';
 
@@ -143,14 +144,15 @@ export class PatternsService extends DrizzleService<Pattern, Partial<Pattern>, P
     feedback?: string,
     _params?: PatternsParams
   ): Promise<Pattern> {
+    const authParams = _params as AuthenticatedParams | undefined;
     // Record application
     await this.applicationsRepo.create({
-      pattern_id: patternId,
-      session_id: sessionId,
-      task_id: taskId,
+      pattern_id: patternId as PatternID,
+      session_id: sessionId as SessionID,
+      task_id: taskId as TaskID | undefined,
       outcome,
       feedback,
-      created_by: _params?.user?.user_id || 'anonymous',
+      created_by: authParams?.user?.user_id || 'anonymous',
     });
 
     // Update pattern statistics and confidence
@@ -173,6 +175,7 @@ export class PatternsService extends DrizzleService<Pattern, Partial<Pattern>, P
     },
     _params?: PatternsParams
   ): Promise<Pattern> {
+    const authParams = _params as AuthenticatedParams | undefined;
     return this.patternsRepo.create({
       category: data.category,
       summary: data.summary,
@@ -180,12 +183,12 @@ export class PatternsService extends DrizzleService<Pattern, Partial<Pattern>, P
       implementation: data.implementation,
       tags: data.tags,
       source: {
-        session_id: data.session_id,
-        task_id: data.task_id,
-        worktree_id: data.worktree_id,
+        session_id: data.session_id as SessionID,
+        task_id: data.task_id as TaskID | undefined,
+        worktree_id: data.worktree_id as WorktreeID | undefined,
       },
       confidence: 70, // Start with medium-high confidence for manually captured patterns
-      created_by: _params?.user?.user_id || 'anonymous',
+      created_by: authParams?.user?.user_id || 'anonymous',
     });
   }
 

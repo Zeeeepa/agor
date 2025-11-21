@@ -59,7 +59,9 @@ export async function fetchJWTToken(
     const cacheKey = getCacheKey(config);
     const cached = tokenCache.get(cacheKey);
     if (cached && Date.now() < cached.expiresAt) {
-      console.log(`🔐 [MCP JWT] Using cached token for ${config.api_url} (expires in ${Math.round((cached.expiresAt - Date.now()) / 1000)}s)`);
+      console.log(
+        `🔐 [MCP JWT] Using cached token for ${config.api_url} (expires in ${Math.round((cached.expiresAt - Date.now()) / 1000)}s)`
+      );
       return cached.token;
     }
   }
@@ -97,7 +99,10 @@ export async function fetchJWTToken(
       );
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as {
+      access_token?: string;
+      payload?: { access_token?: string };
+    };
 
     // Extract access token from response
     // Supports both {"payload": {"access_token": "..."}} and {"access_token": "..."}
@@ -151,7 +156,9 @@ export async function fetchJWTToken(
  * @param auth - MCP authentication configuration (none, bearer, or jwt)
  * @returns Bearer token string or undefined if no auth
  */
-export async function resolveMCPAuthToken(auth: MCPAuthConfig | undefined): Promise<string | undefined> {
+export async function resolveMCPAuthToken(
+  auth: MCPAuthConfig | undefined
+): Promise<string | undefined> {
   if (!auth || auth.type === 'none') {
     return undefined;
   }

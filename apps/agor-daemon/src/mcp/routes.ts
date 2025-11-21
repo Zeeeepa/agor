@@ -10,6 +10,7 @@ import type { AgenticToolName } from '@agor/core/types';
 import { normalizeOptionalHttpUrl } from '@agor/core/utils/url';
 import type { Request, Response } from 'express';
 import type { ReposServiceImpl, SessionsServiceImpl } from '../declarations.js';
+import type { PatternsService } from '../services/patterns.js';
 import { validateSessionToken } from './tokens.js';
 
 const WORKTREE_NAME_PATTERN = /^[a-z0-9-]+$/;
@@ -2205,7 +2206,7 @@ export function setupMCPRoutes(app: Application): void {
             });
           }
 
-          const patterns = await app.service('patterns').search(args.query, {
+          const patterns = await (app.service('patterns') as PatternsService).search(args.query, {
             category: args.category,
             minConfidence: args.minConfidence || 70,
             limit: args.limit || 5,
@@ -2236,7 +2237,7 @@ export function setupMCPRoutes(app: Application): void {
           // Get current session to capture source
           const session = await app.service('sessions').get(context.sessionId);
 
-          const pattern = await app.service('patterns').captureFromTask(
+          const pattern = await (app.service('patterns') as PatternsService).captureFromTask(
             {
               category: args.category,
               summary: args.summary,

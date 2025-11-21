@@ -62,7 +62,9 @@ export class PatternsRepository implements BaseRepository<Pattern, Partial<Patte
     return {
       pattern_id: row.pattern_id as PatternID,
       created_at: new Date(row.created_at).toISOString(),
-      updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : new Date(row.created_at).toISOString(),
+      updated_at: row.updated_at
+        ? new Date(row.updated_at).toISOString()
+        : new Date(row.created_at).toISOString(),
       category: row.category as PatternCategory,
       confidence: row.confidence,
       usage_count: row.usage_count,
@@ -137,7 +139,7 @@ export class PatternsRepository implements BaseRepository<Pattern, Partial<Patte
       throw new AmbiguousIdError(
         'Pattern',
         id,
-        results.map((r) => formatShortId(r.pattern_id as UUID))
+        results.map(r => formatShortId(r.pattern_id as UUID))
       );
     }
 
@@ -230,7 +232,7 @@ export class PatternsRepository implements BaseRepository<Pattern, Partial<Patte
       query = query.orderBy(desc(patterns.confidence), desc(patterns.usage_count)) as typeof query;
 
       const rows = await query.all();
-      return rows.map((row) => this.rowToPattern(row));
+      return rows.map(row => this.rowToPattern(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to find patterns: ${error instanceof Error ? error.message : String(error)}`,
@@ -311,19 +313,15 @@ export class PatternsRepository implements BaseRepository<Pattern, Partial<Patte
     try {
       const searchTerm = `%${query.toLowerCase()}%`;
 
-      let dbQuery = this.db
-        .select()
-        .from(patterns)
-        .where(
-          or(
-            sql`LOWER(json_extract(${patterns.data}, '$.summary')) LIKE ${searchTerm}`,
-            sql`LOWER(json_extract(${patterns.data}, '$.context')) LIKE ${searchTerm}`,
-            sql`LOWER(json_extract(${patterns.data}, '$.implementation')) LIKE ${searchTerm}`
-          )
-        );
+      // Build all conditions upfront - can't chain multiple .where() calls in Drizzle
+      const searchCondition = or(
+        sql`LOWER(json_extract(${patterns.data}, '$.summary')) LIKE ${searchTerm}`,
+        sql`LOWER(json_extract(${patterns.data}, '$.context')) LIKE ${searchTerm}`,
+        sql`LOWER(json_extract(${patterns.data}, '$.implementation')) LIKE ${searchTerm}`
+      );
 
       // Apply filters
-      const conditions = [];
+      const conditions = [searchCondition];
       if (options?.category) {
         conditions.push(eq(patterns.category, options.category));
       }
@@ -334,9 +332,10 @@ export class PatternsRepository implements BaseRepository<Pattern, Partial<Patte
         conditions.push(gte(patterns.usage_count, options.minUsageCount));
       }
 
-      if (conditions.length > 0) {
-        dbQuery = dbQuery.where(and(...conditions)) as typeof dbQuery;
-      }
+      let dbQuery = this.db
+        .select()
+        .from(patterns)
+        .where(and(...conditions));
 
       // Order by confidence and usage
       dbQuery = dbQuery.orderBy(
@@ -351,7 +350,7 @@ export class PatternsRepository implements BaseRepository<Pattern, Partial<Patte
       const rows = await dbQuery.all();
 
       // Convert to suggestions with relevance score (placeholder for now)
-      return rows.map((row) => ({
+      return rows.map(row => ({
         ...this.rowToPattern(row),
         relevance: row.confidence / 100, // Simple confidence-based relevance for now
         reason: 'Text match',
@@ -368,7 +367,7 @@ export class PatternsRepository implements BaseRepository<Pattern, Partial<Patte
    * Find patterns by category
    */
   async findByCategory(category: PatternCategory, limit?: number): Promise<Pattern[]> {
-    return this.findAll({ category }).then((patterns) =>
+    return this.findAll({ category }).then(patterns =>
       limit ? patterns.slice(0, limit) : patterns
     );
   }
@@ -377,9 +376,7 @@ export class PatternsRepository implements BaseRepository<Pattern, Partial<Patte
    * Get top patterns (by confidence and usage)
    */
   async getTopPatterns(limit = 10, category?: PatternCategory): Promise<Pattern[]> {
-    return this.findAll({ category, minConfidence: 70 }).then((patterns) =>
-      patterns.slice(0, limit)
-    );
+    return this.findAll({ category, minConfidence: 70 }).then(patterns => patterns.slice(0, limit));
   }
 
   /**
@@ -463,9 +460,7 @@ export class PatternApplicationsRepository
   /**
    * Convert PatternApplication to database insert format
    */
-  private applicationToInsert(
-    application: Partial<PatternApplication>
-  ): PatternApplicationInsert {
+  private applicationToInsert(application: Partial<PatternApplication>): PatternApplicationInsert {
     const now = Date.now();
     const applicationId = application.application_id ?? generateId();
 
@@ -565,7 +560,7 @@ export class PatternApplicationsRepository
       query = query.orderBy(desc(patternApplications.created_at)) as typeof query;
 
       const rows = await query.all();
-      return rows.map((row) => this.rowToApplication(row));
+      return rows.map(row => this.rowToApplication(row));
     } catch (error) {
       throw new RepositoryError(
         `Failed to find pattern applications: ${error instanceof Error ? error.message : String(error)}`,
@@ -577,10 +572,7 @@ export class PatternApplicationsRepository
   /**
    * Update pattern application (mainly for adding feedback)
    */
-  async update(
-    id: string,
-    updates: Partial<PatternApplication>
-  ): Promise<PatternApplication> {
+  async update(id: string, updates: Partial<PatternApplication>): Promise<PatternApplication> {
     try {
       const current = await this.findById(id);
       if (!current) {
@@ -651,9 +643,9 @@ export class PatternApplicationsRepository
 
       const stats = {
         total_applications: applications.length,
-        success_count: applications.filter((a) => a.outcome === 'success').length,
-        failure_count: applications.filter((a) => a.outcome === 'failure').length,
-        partial_count: applications.filter((a) => a.outcome === 'partial').length,
+        success_count: applications.filter(a => a.outcome === 'success').length,
+        failure_count: applications.filter(a => a.outcome === 'failure').length,
+        partial_count: applications.filter(a => a.outcome === 'partial').length,
         success_rate: 0,
       };
 
