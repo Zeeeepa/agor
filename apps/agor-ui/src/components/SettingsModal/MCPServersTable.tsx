@@ -33,12 +33,16 @@ interface MCPServerFormFieldsProps {
   mode: 'create' | 'edit';
   transport?: 'stdio' | 'http' | 'sse';
   onTransportChange?: (transport: 'stdio' | 'http' | 'sse') => void;
+  authType?: 'none' | 'bearer' | 'jwt';
+  onAuthTypeChange?: (authType: 'none' | 'bearer' | 'jwt') => void;
 }
 
 const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
   mode,
   transport,
   onTransportChange,
+  authType = 'none',
+  onAuthTypeChange,
 }) => {
   return (
     <>
@@ -104,13 +108,70 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
           </Form.Item>
         </>
       ) : (
-        <Form.Item
-          label="URL"
-          name="url"
-          rules={mode === 'create' ? [{ required: true, message: 'Please enter a URL' }] : []}
-        >
-          <Input placeholder="https://mcp.example.com" />
-        </Form.Item>
+        <>
+          <Form.Item
+            label="URL"
+            name="url"
+            rules={mode === 'create' ? [{ required: true, message: 'Please enter a URL' }] : []}
+          >
+            <Input placeholder="https://mcp.example.com" />
+          </Form.Item>
+
+          <Form.Item
+            label="Auth Type"
+            name="auth_type"
+            initialValue="none"
+            tooltip="Authentication method for the MCP server"
+          >
+            <Select onChange={(value) => onAuthTypeChange?.(value as 'none' | 'bearer' | 'jwt')}>
+              <Select.Option value="none">None</Select.Option>
+              <Select.Option value="bearer">Bearer Token</Select.Option>
+              <Select.Option value="jwt">JWT</Select.Option>
+            </Select>
+          </Form.Item>
+
+          {authType === 'bearer' && (
+            <Form.Item
+              label="Token"
+              name="auth_token"
+              rules={[{ required: true, message: 'Please enter a bearer token' }]}
+              tooltip="Bearer token for authentication"
+            >
+              <Input.Password placeholder="Enter bearer token" />
+            </Form.Item>
+          )}
+
+          {authType === 'jwt' && (
+            <>
+              <Form.Item
+                label="API URL"
+                name="jwt_api_url"
+                rules={[{ required: true, message: 'Please enter the API URL' }]}
+                tooltip="URL of the JWT authentication API"
+              >
+                <Input placeholder="https://auth.example.com/token" />
+              </Form.Item>
+
+              <Form.Item
+                label="API Token"
+                name="jwt_api_token"
+                rules={[{ required: true, message: 'Please enter the API token' }]}
+                tooltip="Token for the JWT authentication API"
+              >
+                <Input.Password placeholder="Enter API token" />
+              </Form.Item>
+
+              <Form.Item
+                label="API Secret"
+                name="jwt_api_secret"
+                rules={[{ required: true, message: 'Please enter the API secret' }]}
+                tooltip="Secret for the JWT authentication API"
+              >
+                <Input.Password placeholder="Enter API secret" />
+              </Form.Item>
+            </>
+          )}
+        </>
       )}
 
       <Form.Item
@@ -154,6 +215,7 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
   const [viewingServer, setViewingServer] = useState<MCPServer | null>(null);
   const [form] = Form.useForm();
   const [transport, setTransport] = useState<'stdio' | 'http' | 'sse'>('stdio');
+  const [authType, setAuthType] = useState<'none' | 'bearer' | 'jwt'>('none');
 
   const handleCreate = () => {
     form.validateFields().then((values) => {
@@ -175,6 +237,20 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
         data.url = values.url;
       }
 
+      // Add auth config if present
+      if (values.auth_type && values.auth_type !== 'none') {
+        data.auth = {
+          type: values.auth_type,
+        };
+        if (values.auth_type === 'bearer') {
+          data.auth.token = values.auth_token;
+        } else if (values.auth_type === 'jwt') {
+          data.auth.api_url = values.jwt_api_url;
+          data.auth.api_token = values.jwt_api_token;
+          data.auth.api_secret = values.jwt_api_secret;
+        }
+      }
+
       // Add env vars if present
       if (values.env) {
         try {
@@ -193,6 +269,8 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
 
   const handleEdit = (server: MCPServer) => {
     setEditingServer(server);
+    const serverAuthType = (server.auth?.type as 'none' | 'bearer' | 'jwt') || 'none';
+    setAuthType(serverAuthType);
     form.setFieldsValue({
       display_name: server.display_name,
       description: server.description,
@@ -202,6 +280,11 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
       scope: server.scope,
       enabled: server.enabled,
       env: server.env ? JSON.stringify(server.env, null, 2) : undefined,
+      auth_type: serverAuthType,
+      auth_token: server.auth?.token,
+      jwt_api_url: server.auth?.api_url,
+      jwt_api_token: server.auth?.api_token,
+      jwt_api_secret: server.auth?.api_secret,
     });
     setEditModalOpen(true);
   };
@@ -232,6 +315,22 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
         } catch {
           // Invalid JSON, skip
         }
+      }
+
+      // Add auth config if present
+      if (values.auth_type && values.auth_type !== 'none') {
+        updates.auth = {
+          type: values.auth_type,
+        };
+        if (values.auth_type === 'bearer') {
+          updates.auth.token = values.auth_token;
+        } else if (values.auth_type === 'jwt') {
+          updates.auth.api_url = values.jwt_api_url;
+          updates.auth.api_token = values.jwt_api_token;
+          updates.auth.api_secret = values.jwt_api_secret;
+        }
+      } else {
+        updates.auth = undefined;
       }
 
       onUpdate?.(editingServer.mcp_server_id, updates);
@@ -377,6 +476,7 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
           form.resetFields();
           setCreateModalOpen(false);
           setTransport('stdio');
+          setAuthType('none');
         }}
         okText="Create"
         width={600}
@@ -386,6 +486,8 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
             mode="create"
             transport={transport}
             onTransportChange={setTransport}
+            authType={authType}
+            onAuthTypeChange={setAuthType}
           />
         </Form>
       </Modal>
@@ -399,12 +501,18 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
           form.resetFields();
           setEditModalOpen(false);
           setEditingServer(null);
+          setAuthType('none');
         }}
         okText="Save"
         width={600}
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
-          <MCPServerFormFields mode="edit" transport={editingServer?.transport} />
+          <MCPServerFormFields
+            mode="edit"
+            transport={editingServer?.transport}
+            authType={authType}
+            onAuthTypeChange={setAuthType}
+          />
         </Form>
       </Modal>
 
