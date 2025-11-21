@@ -102,9 +102,17 @@ export function highlightMentionsInMarkdown(text: string): string {
     if (isInCodeBlock(offset)) {
       return match; // Keep original if inside code block
     }
+    // Escape HTML to prevent XSS
+    const escapedMatch = match
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+
     // Use inline HTML with background color and bold
     // The background uses a semi-transparent color that works in both light and dark modes
-    return `<span style="background-color: rgba(22, 119, 255, 0.15); border-radius: 3px; padding: 0 2px; font-weight: 600;">${match}</span>`;
+    return `<span style="background-color: rgba(22, 119, 255, 0.15); border-radius: 3px; padding: 0 2px; font-weight: 600;">${escapedMatch}</span>`;
   });
 }
 

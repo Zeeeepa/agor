@@ -416,9 +416,12 @@ export const AutocompleteTextarea = React.forwardRef<
         const queryLength = textBeforeCursor.substring(triggerIndex + 1).length;
 
         let insertText = '';
+        let addTrailingSpace = true;
+
         if ('emoji' in item) {
           // Emoji selection - just insert the emoji character
           insertText = item.emoji;
+          addTrailingSpace = false; // Don't add space after emoji to match Slack behavior
         } else if ('path' in item) {
           // File selection
           insertText = `@${quoteIfNeeded(item.path)}`;
@@ -430,7 +433,7 @@ export const AutocompleteTextarea = React.forwardRef<
         const newValue =
           value.substring(0, triggerIndex) +
           insertText +
-          ' ' +
+          (addTrailingSpace ? ' ' : '') +
           value.substring(triggerIndex + 1 + queryLength);
 
         onChange(newValue);
@@ -442,7 +445,7 @@ export const AutocompleteTextarea = React.forwardRef<
 
         // Move cursor after inserted value
         setTimeout(() => {
-          const newCursorPos = triggerIndex + insertText.length + 1;
+          const newCursorPos = triggerIndex + insertText.length + (addTrailingSpace ? 1 : 0);
           textareaRef.current.current?.setSelectionRange(newCursorPos, newCursorPos);
           textareaRef.current.current?.focus();
         }, 0);
