@@ -68,7 +68,6 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
 
         // Call daemon to test JWT auth (avoids CORS issues)
         const daemonUrl = import.meta.env.VITE_DAEMON_URL || 'http://localhost:3030';
-        const mcpUrl = values.url;
         const response = await fetch(`${daemonUrl}/mcp-servers/test-jwt`, {
           method: 'POST',
           headers: {
@@ -79,7 +78,6 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
             api_url: apiUrl,
             api_token: apiToken,
             api_secret: apiSecret,
-            mcp_url: mcpUrl,
           }),
         });
 
@@ -90,19 +88,9 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
 
         const data = await response.json();
         if (data.success) {
-          if (data.serverName || data.toolCount !== undefined) {
-            const toolInfo = data.toolCount ? ` - ${data.toolCount} tools` : '';
-            const toolNames = data.tools?.length ? `: ${data.tools.join(', ')}` : '';
-            message.success(
-              `Connected to ${data.serverName || 'MCP server'}${toolInfo}${toolNames}`
-            );
-          } else if (data.mcpError) {
-            message.warning(`JWT valid but MCP connection failed: ${data.mcpError}`);
-          } else {
-            message.success('JWT authentication successful');
-          }
+          message.success('JWT authentication successful - token received');
         } else {
-          message.warning(data.error || 'Response received but token validation failed');
+          message.error(data.error || 'JWT authentication failed');
         }
       } else if (currentAuthType === 'bearer') {
         const token = values.auth_token;
