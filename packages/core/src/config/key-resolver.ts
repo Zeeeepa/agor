@@ -15,21 +15,39 @@ export interface KeyResolutionContext {
 }
 
 /**
+ * Result of API key resolution
+ */
+export interface KeyResolutionResult {
+  /** Resolved API key, or undefined if not found at any level */
+  apiKey: string | undefined;
+  /** Source where the key was found */
+  source: 'user' | 'config' | 'env' | 'none';
+  /** Whether SDK should fall back to native auth (OAuth, CLI login, etc.) */
+  useNativeAuth: boolean;
+}
+
+/**
  * Resolve API key with precedence:
- * 1. Per-user key (if user authenticated and key set in database)
- * 2. Global config.yaml
- * 3. Environment variables
+ * 1. Per-user key (if user authenticated and key set in database) - HIGHEST
+ * 2. Global config.yaml - MEDIUM
+ * 3. Environment variables - LOW
+ * 4. SDK native auth (OAuth, CLI login) - FALLBACK (useNativeAuth=true)
  *
  * @param keyName - Name of the API key to resolve
  * @param context - Resolution context (user ID and database)
- * @returns Decrypted API key or undefined if not found
+ * @returns Resolution result with key, source, and native auth flag
  */
 export async function resolveApiKey(
   keyName: ApiKeyName,
   context: KeyResolutionContext = {}
-): Promise<string | undefined> {
+): Promise<KeyResolutionResult> {
+  console.log(
+    `🔍 [API Key Resolution] Resolving ${keyName} for user ${context.userId?.substring(0, 8) || 'none'}`
+  );
+
   // 1. Check per-user key (highest precedence)
   if (context.userId && context.db) {
+    console.log(`   → Checking user-level configuration...`);
     try {
       const row = await select(context.db)
         .from(users)
@@ -42,45 +60,77 @@ export async function resolveApiKey(
 
         if (encryptedKey) {
           const decryptedKey = decryptApiKey(encryptedKey);
-          console.log(
-            `🔑 Using per-user API key for ${keyName} (user: ${context.userId.substring(0, 8)})`
-          );
-          return decryptedKey;
+          if (decryptedKey && decryptedKey.length > 0) {
+            console.log(
+              `   ✓ Found user-level API key for ${keyName} (user: ${context.userId.substring(0, 8)})`
+            );
+            return { apiKey: decryptedKey, source: 'user', useNativeAuth: false };
+          } else {
+            console.log(
+              `   ✗ User-level API key for ${keyName} is empty (user: ${context.userId.substring(0, 8)})`
+            );
+          }
+        } else {
+          console.log(`   ✗ No user-level API key for ${keyName}`);
         }
+      } else {
+        console.log(`   ✗ User record not found`);
       }
     } catch (err) {
-      console.error(`Failed to resolve per-user key for ${keyName}:`, err);
+      console.error(`   ✗ Failed to check user-level key:`, err);
       // Fall through to global/env fallback
     }
+  } else if (!context.userId) {
+    console.log(`   → Skipping user-level check (no user ID provided)`);
+  } else if (!context.db) {
+    console.log(`   → Skipping user-level check (no database connection)`);
   }
 
   // 2. Check global config.yaml (second precedence)
+  console.log(`   → Checking app-level configuration (config.yaml)...`);
   const globalKey = getCredential(keyName);
-  if (globalKey) {
-    console.log(`🔑 Using global API key for ${keyName} (from config.yaml)`);
-    return globalKey;
+  if (globalKey && globalKey.length > 0) {
+    console.log(`   ✓ Found app-level API key for ${keyName} (from config.yaml)`);
+    return { apiKey: globalKey, source: 'config', useNativeAuth: false };
+  } else {
+    console.log(`   ✗ No app-level API key for ${keyName}`);
   }
 
-  // 3. Fallback to environment variable (lowest precedence)
+  // 3. Check environment variable (third precedence)
+  console.log(`   → Checking OS-level environment variables...`);
   const envKey = process.env[keyName];
-  if (envKey) {
-    console.log(`🔑 Using environment variable for ${keyName}`);
-    return envKey;
+  if (envKey && envKey.length > 0) {
+    console.log(`   ✓ Found OS-level environment variable ${keyName}`);
+    return { apiKey: envKey, source: 'env', useNativeAuth: false };
+  } else {
+    console.log(`   ✗ No OS-level environment variable ${keyName}`);
   }
 
-  // No key found
-  return undefined;
+  // 4. No key found - SDK should fall back to native auth (OAuth, CLI login, etc.)
+  console.log(`   ℹ️  No API key found for ${keyName} - SDK will use native authentication`);
+  return { apiKey: undefined, source: 'none', useNativeAuth: true };
 }
 
 /**
- * Synchronous version of resolveApiKey (only checks global + env, not per-user)
+ * Synchronous version of resolveApiKey (only checks config + env, not per-user)
  * Use this when database access is not available
+ *
+ * @param keyName - Name of the API key to resolve
+ * @returns Resolution result (cannot check user-level keys synchronously)
  */
-export function resolveApiKeySync(keyName: ApiKeyName): string | undefined {
+export function resolveApiKeySync(keyName: ApiKeyName): KeyResolutionResult {
   // Check global config.yaml
   const globalKey = getCredential(keyName);
-  if (globalKey) return globalKey;
+  if (globalKey && globalKey.length > 0) {
+    return { apiKey: globalKey, source: 'config', useNativeAuth: false };
+  }
 
-  // Fallback to environment variable
-  return process.env[keyName];
+  // Check environment variable
+  const envKey = process.env[keyName];
+  if (envKey && envKey.length > 0) {
+    return { apiKey: envKey, source: 'env', useNativeAuth: false };
+  }
+
+  // No key found - use native auth
+  return { apiKey: undefined, source: 'none', useNativeAuth: true };
 }

@@ -60,7 +60,6 @@ import {
   select,
   sessionMcpServers,
   TaskRepository,
-  UsersRepository,
   WorktreeRepository,
 } from '@agor/core/db';
 import {
@@ -75,6 +74,7 @@ import {
   NotAuthenticated,
   rest,
   socketio,
+  validateQuery,
 } from '@agor/core/feathers';
 import {
   boardCommentQueryValidator,
@@ -104,7 +104,6 @@ import type {
 } from '@agor/core/types';
 import { SessionStatus, TaskStatus } from '@agor/core/types';
 import { NotFoundError } from '@agor/core/utils/errors';
-import { validateQuery } from '@feathersjs/schema';
 
 /**
  * Type guard to check if result is paginated
@@ -214,51 +213,6 @@ export function initializeGeminiApiKey(
   }
 
   return geminiApiKey;
-}
-
-/**
- * Resolve API key for a given agentic tool
- * Priority: user-specific encrypted key > environment variable
- */
-async function resolveApiKey(
-  db: Awaited<ReturnType<typeof createDatabaseAsync>>,
-  agenticTool: string,
-  user: { user_id: string } | undefined
-): Promise<string> {
-  // Map tool name to credential key
-  const credentialMap: Record<
-    string,
-    { env: string; provider: 'anthropic' | 'openai' | 'gemini' }
-  > = {
-    'claude-code': { env: 'ANTHROPIC_API_KEY', provider: 'anthropic' },
-    codex: { env: 'OPENAI_API_KEY', provider: 'openai' },
-    gemini: { env: 'GEMINI_API_KEY', provider: 'gemini' },
-    opencode: { env: 'OPENAI_API_KEY', provider: 'openai' },
-  };
-
-  const credential = credentialMap[agenticTool];
-  if (!credential) {
-    throw new Error(`Unknown agentic tool: ${agenticTool}`);
-  }
-
-  // Try user-specific encrypted key first (if user is authenticated)
-  if (user) {
-    const usersRepo = new UsersRepository(db);
-    const userApiKey = await usersRepo.getApiKey(user.user_id, credential.provider);
-    if (userApiKey) {
-      return userApiKey;
-    }
-  }
-
-  // Fallback to environment variable
-  const envApiKey = process.env[credential.env];
-  if (envApiKey) {
-    return envApiKey;
-  }
-
-  throw new Error(
-    `No API key found for ${agenticTool}. Set ${credential.env} environment variable or configure user API key.`
-  );
 }
 
 // Main async function
@@ -746,42 +700,16 @@ async function main() {
 
   console.log('✅ Database ready');
 
-  // Initialize executor services (Phase 4)
-  // Types imported dynamically below when enabled
-  let executorPool: import('./services/executor-pool').ExecutorPool | null = null;
-  let sessionTokenService: import('./services/session-token-service').SessionTokenService | null =
-    null;
-  let executorIPCService: import('./services/executor-ipc-service').ExecutorIPCService | null =
-    null;
+  // Initialize session token service (ALWAYS needed for Feathers/WebSocket executor)
+  const { SessionTokenService } = await import('./services/session-token-service.js');
+  const sessionTokenService = new SessionTokenService({
+    expiration_ms: config.execution?.session_token_expiration_ms || 24 * 60 * 60 * 1000,
+    max_uses: config.execution?.session_token_max_uses || -1,
+  });
 
-  if (config.execution?.use_executor) {
-    console.log('🔧 Initializing executor services...');
-
-    const { SessionTokenService } = await import('./services/session-token-service.js');
-    const { ExecutorIPCService } = await import('./services/executor-ipc-service.js');
-    const { ExecutorPool } = await import('./services/executor-pool.js');
-
-    // Create session token service
-    sessionTokenService = new SessionTokenService({
-      expiration_ms: config.execution.session_token_expiration_ms || 24 * 60 * 60 * 1000,
-      max_uses: config.execution.session_token_max_uses || -1,
-    });
-
-    // Create IPC service (will be initialized with app after it's created)
-    executorIPCService = new ExecutorIPCService(app, db, sessionTokenService);
-
-    // Create executor pool
-    executorPool = new ExecutorPool(config, executorIPCService);
-
-    // Attach to app for access from services
-    // Cast to unknown first then to Record for dynamic property assignment
-    const appRecord = app as unknown as Record<string, unknown>;
-    appRecord.executorPool = executorPool;
-    appRecord.sessionTokenService = sessionTokenService;
-    appRecord.executorIPCService = executorIPCService;
-
-    console.log('✅ Executor services initialized');
-  }
+  // Attach sessionTokenService to app (needed for Feathers/WebSocket executor)
+  const appRecord = app as unknown as Record<string, unknown>;
+  appRecord.sessionTokenService = sessionTokenService;
 
   // Register core services
   // NOTE: Pass app instance for user preferences access (needed for cross-tool spawning and ready_for_prompt updates)
@@ -795,6 +723,7 @@ async function main() {
     // Import spawn and path utilities
     const { spawn } = await import('node:child_process');
     const path = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
 
     // Get session and validate
     const session = await sessionsService.get(sessionId, params);
@@ -817,12 +746,11 @@ async function main() {
     // Use the task ID provided by caller (task already created by prompt endpoint)
     const taskId = data.taskId;
 
-    // Resolve API key for the session's agentic tool
-    const apiKey = await resolveApiKey(
-      db,
-      session.agentic_tool,
-      (params as AuthenticatedParams).user
-    );
+    // NOTE: API key resolution is now handled by the executor with proper precedence:
+    // 1. Per-user encrypted keys (from database)
+    // 2. Global config.yaml keys
+    // 3. Environment variables
+    // The executor will let SDKs handle OAuth if no key is found.
 
     // Get worktree path
     let cwd = process.cwd();
@@ -838,40 +766,78 @@ async function main() {
     // Spawn executor process with Feathers/WebSocket mode
     const dirname =
       typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
-    const executorPath = path.join(dirname, '../../executor/dist/cli.js');
+
+    // Try multiple possible paths for executor (development vs bundled)
+    const { existsSync } = await import('node:fs');
+    const possiblePaths = [
+      path.join(dirname, '../executor/cli.js'), // Bundled in agor-live
+      path.join(dirname, '../../../packages/executor/bin/agor-executor'), // Development - bin script with fallback to tsx
+      path.join(dirname, '../../../packages/executor/dist/cli.js'), // Development from apps/agor-daemon/dist (if built)
+    ];
+
+    const executorPath = possiblePaths.find((p) => existsSync(p));
+    if (!executorPath) {
+      throw new Error(
+        `Executor binary not found. Tried:\n${possiblePaths.map((p) => `  - ${p}`).join('\n')}`
+      );
+    }
+
+    console.log(`[Daemon] Using executor at: ${executorPath}`);
+
     const daemonUrl = `http://localhost:${DAEMON_PORT}`;
 
-    const executorProcess = spawn(
-      'node',
-      [
-        executorPath,
-        '--session-token',
-        sessionToken,
-        '--session-id',
-        sessionId,
-        '--task-id',
-        taskId,
-        '--prompt',
-        data.prompt,
-        '--tool',
-        session.agentic_tool,
-        '--permission-mode',
-        data.permissionMode || 'default',
-        '--daemon-url',
-        daemonUrl,
-      ],
-      {
-        cwd,
-        env: {
-          ...process.env,
-          // Inject API key based on agentic tool
-          ...(session.agentic_tool === 'claude-code' && { ANTHROPIC_API_KEY: apiKey }),
-          ...(session.agentic_tool === 'gemini' && { GEMINI_API_KEY: apiKey }),
-          ...(session.agentic_tool === 'codex' && { OPENAI_API_KEY: apiKey }),
-        },
-        stdio: ['ignore', 'pipe', 'pipe'], // Capture stdout/stderr
-      }
-    );
+    // Build spawn command with optional Unix user impersonation
+    const executorUnixUser = config.execution?.executor_unix_user;
+    const nodeArgs = [
+      executorPath,
+      '--session-token',
+      sessionToken,
+      '--session-id',
+      sessionId,
+      '--task-id',
+      taskId,
+      '--prompt',
+      data.prompt,
+      '--tool',
+      session.agentic_tool,
+      '--permission-mode',
+      data.permissionMode || 'default',
+      '--daemon-url',
+      daemonUrl,
+    ];
+
+    let spawnCommand: string;
+    let spawnArgs: string[];
+
+    if (executorUnixUser) {
+      // Run as different Unix user via sudo
+      spawnCommand = 'sudo';
+      spawnArgs = [
+        '-n', // Non-interactive (fail if password required)
+        '-u',
+        executorUnixUser,
+        'node',
+        ...nodeArgs,
+      ];
+      console.log(`[Daemon] Spawning executor as Unix user: ${executorUnixUser}`);
+    } else {
+      // Run as current user
+      spawnCommand = 'node';
+      spawnArgs = nodeArgs;
+      console.log(`[Daemon] Spawning executor as current user (no impersonation)`);
+    }
+
+    const executorProcess = spawn(spawnCommand, spawnArgs, {
+      cwd,
+      env: {
+        ...process.env,
+        // Executor handles API key resolution with proper precedence:
+        // 1. Per-user encrypted keys (database)
+        // 2. Global config.yaml keys
+        // 3. Environment variables (inherited from process.env above)
+      },
+      stdio: ['ignore', 'pipe', 'pipe'], // Capture stdout/stderr
+    });
 
     // Log executor output
     executorProcess.stdout?.on('data', (data) => {
@@ -882,8 +848,29 @@ async function main() {
       console.error(`[Executor ${sessionId.slice(0, 8)}] ${data.toString().trim()}`);
     });
 
-    executorProcess.on('exit', (code) => {
+    executorProcess.on('exit', async (code) => {
       console.log(`[Executor ${sessionId.slice(0, 8)}] Exited with code ${code}`);
+
+      // Update session status back to IDLE when executor completes
+      // This handles successful completion - error cases are handled in the catch block at line 2234
+      if (code === 0) {
+        try {
+          await app.service('sessions').patch(
+            sessionId,
+            {
+              status: SessionStatus.IDLE,
+              ready_for_prompt: true,
+            },
+            params
+          );
+          console.log(
+            `✅ [Executor] Session ${sessionId.slice(0, 8)} status updated to IDLE after successful completion`
+          );
+        } catch (error) {
+          console.error(`❌ [Executor] Failed to update session status to IDLE:`, error);
+        }
+      }
+
       // Revoke session token after executor exits
       appWithExecutor.sessionTokenService?.revokeToken(sessionToken);
     });
@@ -904,40 +891,8 @@ async function main() {
       timestamp: new Date().toISOString(),
     });
 
-    // ALSO send IPC request for legacy IPC executors
-    const appWithExecutor = app as unknown as {
-      executorPool?: import('./services/executor-pool').ExecutorPool;
-      sessionExecutors?: Map<string, string>;
-    };
-
-    if (appWithExecutor.executorPool && appWithExecutor.sessionExecutors) {
-      const executorId = appWithExecutor.sessionExecutors.get(sessionId);
-      if (executorId) {
-        const executor = appWithExecutor.executorPool.get(executorId);
-        if (executor) {
-          try {
-            console.log(
-              `🛑 Sending IPC stop_task to executor ${executorId.slice(0, 8)} for session ${sessionId.slice(0, 8)}`
-            );
-            await executor.client.request(
-              'stop_task',
-              {
-                session_id: sessionId,
-                task_id: data.taskId,
-              },
-              5000
-            );
-            console.log(`✅ IPC stop_task succeeded for executor ${executorId.slice(0, 8)}`);
-          } catch (error) {
-            console.error(`❌ IPC stop_task failed for executor ${executorId.slice(0, 8)}:`, error);
-            return {
-              success: false,
-              message: `Failed to send stop signal via IPC: ${error instanceof Error ? error.message : 'Unknown error'}`,
-            };
-          }
-        }
-      }
-    }
+    // NOTE: Stop is handled by the executor listening to WebSocket task:stop event
+    // No IPC needed - executor subprocess watches for status changes via WebSocket
 
     return {
       success: true,
@@ -1074,58 +1029,9 @@ async function main() {
           // Permission was resolved! Notify the executor via IPC
           console.log(`[daemon] Permission ${status} for request ${contentObj.request_id}`);
 
-          // Get the executor pool and session executors map
-          const appWithExecutor = app as unknown as {
-            executorPool?: import('./services/executor-pool').ExecutorPool;
-            sessionExecutors?: Map<string, string>;
-          };
-          const executorPool = appWithExecutor.executorPool;
-          const sessionExecutors = appWithExecutor.sessionExecutors;
-
-          if (!executorPool) {
-            console.warn('[daemon] ExecutorPool not available, cannot notify executor');
-            return context;
-          }
-
-          if (!sessionExecutors) {
-            console.warn('[daemon] sessionExecutors map not available, cannot notify executor');
-            return context;
-          }
-
-          // Find the executor for this session
-          const sessionId = message.session_id;
-          const executorId = sessionExecutors.get(sessionId);
-
-          if (!executorId) {
-            console.log('[daemon] No executor found for session, skipping IPC notification');
-            return context;
-          }
-
-          // Get the executor instance
-          const executor = executorPool.get(executorId);
-          if (!executor) {
-            console.warn(`[daemon] Executor ${executorId} not found in pool`);
-            return context;
-          }
-
-          // Build permission decision
-          const decision = {
-            requestId: contentObj.request_id as string,
-            taskId: message.task_id,
-            allow: status === 'approved',
-            reason: status === 'denied' ? 'User denied permission' : undefined,
-            remember: !!contentObj.scope,
-            scope: contentObj.scope || 'once',
-            decidedBy: contentObj.approved_by || 'unknown',
-          };
-
-          // Send IPC notification to executor
-          try {
-            executor.client.notify('permission_resolved', decision);
-            console.log(`[daemon] Sent permission_resolved notification to executor ${executorId}`);
-          } catch (error) {
-            console.error('[daemon] Failed to send permission_resolved notification:', error);
-          }
+          // NOTE: Permission decisions are handled by the executor listening to WebSocket permission events
+          // No IPC needed - executor subprocess watches for permission message updates via WebSocket
+          console.log('[daemon] Permission decision will be delivered to executor via WebSocket');
 
           return context;
         },
@@ -2115,6 +2021,7 @@ async function main() {
         {
           tasks: [...session.tasks, task.task_id],
           status: SessionStatus.RUNNING,
+          ready_for_prompt: false, // Clear ready flag when execution starts
         },
         params
       );
@@ -2203,6 +2110,12 @@ async function main() {
             },
             params
           );
+
+          // CRITICAL: Update session back to idle after successful execution
+          console.log(
+            `✅ [Daemon] Execution completed, setting session ${id.substring(0, 8)} to idle`
+          );
+          await app.service('sessions').patch(id, { status: SessionStatus.IDLE }, params);
         } catch (error) {
           console.error(`❌ [Daemon] Executor execution failed:`, error);
           // Update task to failed status
@@ -2215,6 +2128,10 @@ async function main() {
             },
             'Task',
             params
+          );
+          // Update session back to idle after failed execution
+          console.log(
+            `❌ [Daemon] Execution failed, setting session ${id.substring(0, 8)} to idle`
           );
           await app.service('sessions').patch(id, { status: SessionStatus.IDLE }, params);
         }

@@ -5,20 +5,20 @@
  * Automatically loads CLAUDE.md and uses preset system prompts matching Claude Code CLI.
  */
 
-import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk/sdk';
+import type { PermissionMode } from '@agor/core/sdk';
 import type {
   MCPServerRepository,
   MessagesRepository,
   SessionMCPServerRepository,
   SessionRepository,
   WorktreeRepository,
-} from '../../db/feathers-repositories';
-import type { PermissionService } from '../../permissions/permission-service';
-import type { SessionID, TaskID } from '../../types';
-import { MessageRole } from '../../types';
-import type { SessionsService, TasksService } from './claude-tool';
-import { type ProcessedEvent, SDKMessageProcessor } from './message-processor';
-import { setupQuery } from './query-builder';
+} from '../../db/feathers-repositories.js';
+import type { PermissionService } from '../../permissions/permission-service.js';
+import type { SessionID, TaskID } from '../../types.js';
+import { MessageRole } from '../../types.js';
+import type { SessionsService, TasksService } from './claude-tool.js';
+import { type ProcessedEvent, SDKMessageProcessor } from './message-processor.js';
+import { setupQuery } from './query-builder.js';
 
 export interface PromptResult {
   /** Assistant messages (can be multiple: tool invocation, then response) */

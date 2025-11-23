@@ -50,6 +50,11 @@ while [ ! -f "/app/packages/core/dist/index.js" ] || [ ! -f "/app/packages/core/
 done
 echo "✅ @agor/core build ready"
 
+# Build executor package (needed for spawning executor subprocess)
+echo "🔄 Building @agor/executor..."
+pnpm --filter @agor/executor build
+echo "✅ @agor/executor build ready"
+
 # Fix volume permissions (volumes may be created with wrong ownership)
 # Only chown .agor directory (not .ssh which is mounted read-only)
 mkdir -p /home/agor/.agor
@@ -60,28 +65,17 @@ sudo chown -R agor:agor /home/agor/.agor
 echo "📦 Initializing Agor environment..."
 pnpm agor init --skip-if-exists --set-config --daemon-port "${DAEMON_PORT:-3030}" --daemon-host localhost
 
-# Configure executor isolation if enabled
+# Configure executor Unix user isolation if enabled
 if [ "$AGOR_USE_EXECUTOR" = "true" ]; then
-  echo "🔒 Enabling executor isolation mode..."
-  echo "   User: ${AGOR_EXECUTOR_USERNAME:-agor_executor}"
-  echo "   Impersonation: ${AGOR_EXECUTOR_IMPERSONATION:-sudo}"
-
-  # Remove old executor config if it exists (in case field names changed)
-  if grep -q "^execution:" /home/agor/.agor/config.yaml 2>/dev/null; then
-    echo "   Removing old executor config..."
-    sed -i '/^execution:/,/^[a-z_]*:/{ /^execution:/d; /^  /d; }' /home/agor/.agor/config.yaml
-  fi
+  echo "🔒 Enabling executor Unix user isolation..."
+  echo "   Executor will run as: ${AGOR_EXECUTOR_USERNAME:-agor_executor}"
 
   # Add executor config to ~/.agor/config.yaml
   cat >> /home/agor/.agor/config.yaml <<EOF
 execution:
-  use_executor: true
-  run_as_unix_user: true
   executor_unix_user: ${AGOR_EXECUTOR_USERNAME:-agor_executor}
-  session_token_expiration_ms: 86400000
-  session_token_max_uses: -1
 EOF
-  echo "✅ Executor isolation configured"
+  echo "✅ Executor Unix user configured"
 fi
 
 # Always create/update admin user (safe: only upserts)

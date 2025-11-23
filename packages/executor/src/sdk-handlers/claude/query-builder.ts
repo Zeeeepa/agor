@@ -8,11 +8,13 @@
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import { validateDirectory } from '@agor/core';
-// @ts-expect-error - templates not exported from @agor/core index
-import { renderAgorSystemPrompt } from '@agor/core/src/templates/session-context';
-import { query } from '@anthropic-ai/claude-agent-sdk';
-import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk/sdk';
-import { getDaemonUrl, resolveApiKey, resolveUserEnvironment } from '../../config';
+import { Claude } from '@agor/core/sdk';
+import { renderAgorSystemPrompt } from '@agor/core/templates/session-context';
+
+const { query } = Claude;
+type PermissionMode = Claude.PermissionMode;
+
+import { getDaemonUrl, resolveUserEnvironment } from '../../config.js';
 import type {
   MCPServerRepository,
   MessagesRepository,
@@ -20,13 +22,13 @@ import type {
   SessionMCPServerRepository,
   SessionRepository,
   WorktreeRepository,
-} from '../../db/feathers-repositories';
-import type { PermissionService } from '../../permissions/permission-service';
-import type { MCPServersConfig, SessionID, TaskID, UserID } from '../../types';
-import type { MessagesService, SessionsService, TasksService } from './claude-tool';
-import { DEFAULT_CLAUDE_MODEL } from './models';
-import { createCanUseToolCallback } from './permissions/permission-hooks';
-import { detectThinkingLevel, resolveThinkingBudget } from './thinking-detector';
+} from '../../db/feathers-repositories.js';
+import type { PermissionService } from '../../permissions/permission-service.js';
+import type { MCPServersConfig, SessionID, TaskID, UserID } from '../../types.js';
+import type { MessagesService, SessionsService, TasksService } from './claude-tool.js';
+import { DEFAULT_CLAUDE_MODEL } from './models.js';
+import { createCanUseToolCallback } from './permissions/permission-hooks.js';
+import { detectThinkingLevel, resolveThinkingBudget } from './thinking-detector.js';
 
 /**
  * Get path to Claude Code executable
@@ -289,11 +291,10 @@ export async function setupQuery(
 
   // Add optional apiKey if provided
   // NOTE: Don't require API key - user may have used `claude login` (OAuth)
-  // In executor mode, API keys are passed directly from daemon via IPC
-  // If deps.apiKey is provided, use it; otherwise rely on environment
-  const apiKey = deps.apiKey || resolveApiKey(process.env.ANTHROPIC_API_KEY || '');
-  if (apiKey) {
-    queryOptions.apiKey = apiKey;
+  // API keys are already resolved by base-executor with proper precedence (user → config → env)
+  // If deps.apiKey is provided, use it directly (no need to check process.env)
+  if (deps.apiKey) {
+    queryOptions.apiKey = deps.apiKey;
   }
 
   // Resolve user environment variables
@@ -586,7 +587,7 @@ export async function setupQuery(
     console.error(`❌ CRITICAL: query() threw synchronous error (very unusual):`, syncError);
     console.error(`   Claude Code path: ${claudeCodePath}`);
     console.error(`   CWD: ${cwd}`);
-    console.error(`   API key set: ${apiKey ? 'YES' : 'NO'}`);
+    console.error(`   API key set: ${deps.apiKey ? 'YES' : 'NO'}`);
     console.error(`   Resume session: ${queryOptions.resume || 'none (fresh session)'}`);
     throw syncError;
   }
