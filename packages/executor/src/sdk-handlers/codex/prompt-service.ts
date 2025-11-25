@@ -595,15 +595,23 @@ export class CodexPromptService {
     if (this.sessionMCPServerRepo && session.sdk_session_id) {
       try {
         const sessionMCPServers =
-          await this.sessionMCPServerRepo.listServersWithMetadata(sessionId);
+          await this.sessionMCPServerRepo.listServersWithMetadata(sessionId, true);
         const sessionCreatedAt = new Date(session.created_at).getTime();
+        const sessionLastUpdated = session.last_updated
+          ? new Date(session.last_updated).getTime()
+          : sessionCreatedAt;
+        const sessionReferenceTime = Math.max(sessionCreatedAt, sessionLastUpdated);
 
         for (const sms of sessionMCPServers) {
-          if (sms.added_at > sessionCreatedAt) {
+          if (sms.enabled && sms.added_at > sessionReferenceTime) {
             mcpServersAddedAfterCreation = true;
-            console.warn(
-              `⚠️  [Codex MCP] Server "${sms.server.name}" was added ${Math.round((sms.added_at - sessionCreatedAt) / 1000 / 60)} minutes after session creation`
+            const minutesAfterReference = Math.round(
+              (sms.added_at - sessionReferenceTime) / 1000 / 60
             );
+            console.warn(
+              `⚠️  [Codex MCP] Server "${sms.server.name}" was added ${minutesAfterReference} minute(s) after the session last updated`
+            );
+            break;
           }
         }
       } catch (error) {
@@ -613,7 +621,7 @@ export class CodexPromptService {
 
     if (mcpServersAddedAfterCreation && session.sdk_session_id) {
       console.warn(
-        `⚠️  [Codex MCP] MCP servers were added AFTER session creation - SDK thread won't see them!`
+        `⚠️  [Codex MCP] MCP servers were added after the last SDK sync - current thread won't see them!`
       );
       console.warn(`   🔧 SOLUTION: Clearing sdk_session_id to force fresh thread start`);
       console.warn(

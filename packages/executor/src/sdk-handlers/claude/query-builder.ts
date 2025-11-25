@@ -365,15 +365,26 @@ export async function setupQuery(
       let mcpServersAddedAfterCreation = false;
       if (deps.sessionMCPRepo) {
         try {
-          const sessionMCPServers = await deps.sessionMCPRepo.listServersWithMetadata(sessionId);
+          const sessionMCPServers = await deps.sessionMCPRepo.listServersWithMetadata(
+            sessionId,
+            true
+          );
           const sessionCreatedAt = new Date(session.created_at).getTime();
+          const sessionLastUpdated = session.last_updated
+            ? new Date(session.last_updated).getTime()
+            : sessionCreatedAt;
+          const sessionReferenceTime = Math.max(sessionCreatedAt, sessionLastUpdated);
 
           for (const sms of sessionMCPServers) {
-            if (sms.added_at > sessionCreatedAt) {
+            if (sms.enabled && sms.added_at > sessionReferenceTime) {
               mcpServersAddedAfterCreation = true;
-              console.warn(
-                `⚠️  [MCP] Server "${sms.server.name}" was added ${Math.round((sms.added_at - sessionCreatedAt) / 1000 / 60)} minutes after session creation`
+              const minutesAfterReference = Math.round(
+                (sms.added_at - sessionReferenceTime) / 1000 / 60
               );
+              console.warn(
+                `⚠️  [MCP] Server "${sms.server.name}" was added ${minutesAfterReference} minute(s) after the session last updated`
+              );
+              break;
             }
           }
         } catch (error) {
@@ -383,7 +394,7 @@ export async function setupQuery(
 
       if (mcpServersAddedAfterCreation) {
         console.warn(
-          `⚠️  [MCP] MCP servers were added AFTER session creation - SDK session won't see them!`
+          `⚠️  [MCP] MCP servers were added after the last SDK sync - current session won't see them!`
         );
         console.warn(`   🔧 SOLUTION: Clearing sdk_session_id to force fresh session start`);
         console.warn(
