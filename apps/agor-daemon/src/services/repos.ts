@@ -538,6 +538,34 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
 
     // Only reach here if filesystem cleanup succeeded (or wasn't requested)
     // Now safe to delete from database
+
+    // IMPORTANT: Manually delete worktrees first because foreign key cascades
+    // may not be reliable (pragmas are set async in fire-and-forget mode)
+    const worktreesService = this.app.service('worktrees');
+    const worktreesResult = await worktreesService.find({
+      ...params,
+      query: { repo_id: repo.repo_id },
+      paginate: false,
+    });
+
+    const worktrees = (
+      Array.isArray(worktreesResult) ? worktreesResult : worktreesResult.data
+    ) as Worktree[];
+
+    // Delete all worktrees from database
+    for (const worktree of worktrees) {
+      try {
+        await worktreesService.remove(worktree.worktree_id, params);
+        console.log(`🗑️  Deleted worktree from database: ${worktree.name}`);
+      } catch (error) {
+        console.warn(
+          `⚠️  Failed to delete worktree ${worktree.name} from database:`,
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    }
+
+    // Finally, delete repository from database
     return super.remove(id, params) as Promise<Repo>;
   }
 }
