@@ -459,12 +459,16 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
    * Override remove to support filesystem cleanup
    *
    * Supports query parameter: ?cleanup=true to delete filesystem directories
+   *
+   * Behavior: Fail-fast transactional approach
+   * - If cleanup=true: Delete filesystem FIRST, then database (abort on filesystem failure)
+   * - If cleanup=false: Delete database only (filesystem preserved)
    */
   async remove(id: string, params?: RepoParams): Promise<Repo> {
     const repo = await this.get(id, params);
     const cleanup = params?.query?.cleanup === true || params?.query?.cleanup === 'true';
 
-    // If cleanup is requested and this is a remote repo, delete filesystem directories
+    // If cleanup is requested and this is a remote repo, delete filesystem directories FIRST
     if (cleanup && repo.repo_type === 'remote') {
       const { deleteRepoDirectory, deleteWorktreeDirectory } = await import('@agor/core/git');
 
@@ -505,16 +509,22 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
         failures.push({ path: repo.local_path, error: errorMsg });
       }
 
-      // If any filesystem deletions failed, throw an error to inform the caller
+      // FAIL FAST: If filesystem cleanup failed, abort before touching database
+      // This allows user to fix issues (close files, fix permissions) and retry
       if (failures.length > 0) {
         const failureDetails = failures.map((f) => `${f.path}: ${f.error}`).join('; ');
         throw new Error(
-          `Repository deleted from database, but ${failures.length} filesystem deletion(s) failed: ${failureDetails}`
+          `Cannot delete repository: ${failures.length} filesystem deletion(s) failed. ${failureDetails}. Please fix these issues and retry.`
         );
       }
+
+      console.log(
+        `✅ Successfully deleted ${worktrees.length} worktree director${worktrees.length === 1 ? 'y' : 'ies'} and repository directory`
+      );
     }
 
-    // Delete from database using parent class method
+    // Only reach here if filesystem cleanup succeeded (or wasn't requested)
+    // Now safe to delete from database
     return super.remove(id, params) as Promise<Repo>;
   }
 }

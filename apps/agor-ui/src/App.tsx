@@ -652,10 +652,10 @@ function AppContent() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      // Check if this is a partial failure (database deleted but filesystem failed)
-      if (errorMessage.includes('deleted from database, but') && errorMessage.includes('filesystem deletion(s) failed')) {
+      // Check if this is a filesystem failure (fail-fast behavior - nothing deleted)
+      if (errorMessage.includes('Cannot delete repository:') && errorMessage.includes('filesystem deletion(s) failed')) {
         showError(
-          `Repository removed from database, but some files could not be deleted. ${errorMessage}`
+          `Filesystem cleanup failed. Repository and files are still present. ${errorMessage}`
         );
       } else {
         showError(`Failed to delete repository: ${errorMessage}`);
