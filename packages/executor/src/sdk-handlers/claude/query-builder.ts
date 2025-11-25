@@ -359,28 +359,66 @@ export async function setupQuery(
     }
     // CASE 2: Normal resume (session has its own sdk_session_id)
     else if (session?.sdk_session_id) {
-      // Check if session might be stale (prevents exit code 1 errors)
-      const hoursSinceUpdate = session.last_updated
-        ? (Date.now() - new Date(session.last_updated).getTime()) / (1000 * 60 * 60)
-        : 999;
+      // Check if MCP servers were added after session creation
+      // Claude Agent SDK locks in MCP configuration at session creation time
+      // If MCP servers were added later, we need to start fresh to pick them up
+      let mcpServersAddedAfterCreation = false;
+      if (deps.sessionMCPRepo) {
+        try {
+          const sessionMCPServers = await deps.sessionMCPRepo.listServersWithMetadata(sessionId);
+          const sessionCreatedAt = session.created_at;
 
-      const isLikelyStale =
-        hoursSinceUpdate > 24 || // Session older than 24 hours
-        !session.worktree_id; // No worktree = can't resume properly
+          for (const sms of sessionMCPServers) {
+            if (sms.added_at > sessionCreatedAt) {
+              mcpServersAddedAfterCreation = true;
+              console.warn(
+                `⚠️  [MCP] Server "${sms.server.name}" was added ${Math.round((sms.added_at - sessionCreatedAt) / 1000 / 60)} minutes after session creation`
+              );
+            }
+          }
+        } catch (error) {
+          console.warn('⚠️  Failed to check MCP server timestamps:', error);
+        }
+      }
 
-      if (isLikelyStale) {
+      if (mcpServersAddedAfterCreation) {
         console.warn(
-          `⚠️  Resume session ${session.sdk_session_id.substring(0, 8)} appears stale (${Math.round(hoursSinceUpdate)}h old) - starting fresh`
+          `⚠️  [MCP] MCP servers were added AFTER session creation - SDK session won't see them!`
+        );
+        console.warn(`   🔧 SOLUTION: Clearing sdk_session_id to force fresh session start`);
+        console.warn(
+          `   Previous SDK session: ${session.sdk_session_id.substring(0, 8)} (will be discarded)`
         );
 
-        // Clear stale session ID to prevent exit code 1
+        // Clear SDK session ID to force fresh start with new MCP config
         if (deps.sessionsRepo) {
           await deps.sessionsRepo.update(sessionId, { sdk_session_id: undefined });
         }
         // Don't set queryOptions.resume - start fresh
       } else {
-        queryOptions.resume = session.sdk_session_id;
-        console.log(`   Resuming SDK session: ${session.sdk_session_id.substring(0, 8)}`);
+        // Check if session might be stale (prevents exit code 1 errors)
+        const hoursSinceUpdate = session.last_updated
+          ? (Date.now() - new Date(session.last_updated).getTime()) / (1000 * 60 * 60)
+          : 999;
+
+        const isLikelyStale =
+          hoursSinceUpdate > 24 || // Session older than 24 hours
+          !session.worktree_id; // No worktree = can't resume properly
+
+        if (isLikelyStale) {
+          console.warn(
+            `⚠️  Resume session ${session.sdk_session_id.substring(0, 8)} appears stale (${Math.round(hoursSinceUpdate)}h old) - starting fresh`
+          );
+
+          // Clear stale session ID to prevent exit code 1
+          if (deps.sessionsRepo) {
+            await deps.sessionsRepo.update(sessionId, { sdk_session_id: undefined });
+          }
+          // Don't set queryOptions.resume - start fresh
+        } else {
+          queryOptions.resume = session.sdk_session_id;
+          console.log(`   Resuming SDK session: ${session.sdk_session_id.substring(0, 8)}`);
+        }
       }
     }
     // CASE 3: Fresh session (no genealogy, no sdk_session_id)

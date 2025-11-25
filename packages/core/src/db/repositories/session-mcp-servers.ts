@@ -174,6 +174,49 @@ export class SessionMCPServerRepository {
   }
 
   /**
+   * List MCP servers for a session with relationship metadata (added_at timestamp)
+   * Used to detect if servers were added after session creation
+   */
+  async listServersWithMetadata(
+    sessionId: SessionID,
+    enabledOnly = false
+  ): Promise<Array<{ server: MCPServer; added_at: number; enabled: boolean }>> {
+    try {
+      // Get all relationships for this session
+      const conditions = [eq(sessionMcpServers.session_id, sessionId)];
+
+      if (enabledOnly) {
+        conditions.push(eq(sessionMcpServers.enabled, true));
+      }
+
+      const relationships = await select(this.db)
+        .from(sessionMcpServers)
+        .where(and(...conditions))
+        .all();
+
+      // Fetch full MCP server details with metadata for each relationship
+      const results: Array<{ server: MCPServer; added_at: number; enabled: boolean }> = [];
+      for (const rel of relationships) {
+        const server = await this.mcpServerRepo.findById(rel.mcp_server_id);
+        if (server) {
+          results.push({
+            server,
+            added_at: new Date(rel.added_at).getTime(), // Convert to timestamp
+            enabled: Boolean(rel.enabled),
+          });
+        }
+      }
+
+      return results;
+    } catch (error) {
+      throw new RepositoryError(
+        `Failed to list MCP servers with metadata for session: ${error instanceof Error ? error.message : String(error)}`,
+        error
+      );
+    }
+  }
+
+  /**
    * Set MCP servers for a session (bulk operation)
    * Replaces existing relationships with new ones
    */
