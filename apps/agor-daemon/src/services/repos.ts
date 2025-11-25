@@ -467,7 +467,7 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
    */
   async remove(id: string, params?: RepoParams): Promise<Repo> {
     const repo = await this.get(id, params);
-    const cleanup = params?.query?.cleanup === true || params?.query?.cleanup === 'true';
+    const cleanup = params?.query?.cleanup === true;
 
     // Get ALL worktrees for this repo (needed for both filesystem and database cleanup)
     const worktreesService = this.app.service('worktrees');
