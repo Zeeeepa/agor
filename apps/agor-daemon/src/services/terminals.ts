@@ -23,7 +23,11 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createUserProcessEnvironment, loadConfig } from '@agor/core/config';
+import {
+  createUserProcessEnvironment,
+  loadConfig,
+  resolveUserEnvironment,
+} from '@agor/core/config';
 import { type Database, formatShortId, WorktreeRepository } from '@agor/core/db';
 import type { Application } from '@agor/core/feathers';
 import type { AuthenticatedParams, UserID, WorktreeID } from '@agor/core/types';
@@ -253,6 +257,9 @@ export class TerminalsService {
       );
     }
 
+    // Get user-specific environment variables (for env file)
+    const userEnv = resolvedUserId ? await resolveUserEnvironment(resolvedUserId, this.db) : {};
+
     // Create clean environment for terminal (filters Agor-internal vars, adds user vars)
     const baseEnv = await createUserProcessEnvironment(resolvedUserId, this.db, {
       // Terminal-specific environment defaults
@@ -275,13 +282,11 @@ export class TerminalsService {
 
     const env = baseEnv;
 
-    // Write user env vars to file for sourcing in new shells
-    // Note: writeEnvFile gets only the user-specific vars, not the full env
-    // This is OK - writeEnvFile filters out system vars anyway
-    const envFile = resolvedUserId ? writeEnvFile(resolvedUserId, env) : null;
+    // Write user env vars to file for sourcing in new shells (only custom user vars)
+    const envFile = resolvedUserId ? writeEnvFile(resolvedUserId, userEnv) : null;
     if (envFile && resolvedUserId) {
       console.log(
-        `📝 Wrote user env file: ${envFile} (for user ${resolvedUserId.substring(0, 8)})`
+        `📝 Wrote user env file: ${envFile} (${Object.keys(userEnv).length} custom vars for user ${resolvedUserId.substring(0, 8)})`
       );
     }
 
