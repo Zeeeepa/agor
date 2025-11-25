@@ -591,21 +591,31 @@ export async function getGitState(repoPath: string): Promise<string> {
  */
 export async function deleteRepoDirectory(repoPath: string): Promise<void> {
   const { rm } = await import('node:fs/promises');
+  const { resolve, relative } = await import('node:path');
 
   // Safety check: ensure we're only deleting from ~/.agor/repos/
   const reposDir = getReposDir();
-  if (!repoPath.startsWith(reposDir)) {
+
+  // Resolve both paths to eliminate symlinks, '..' segments, etc.
+  const resolvedRepoPath = resolve(repoPath);
+  const resolvedReposDir = resolve(reposDir);
+
+  // Get relative path from reposDir to repoPath
+  const relativePath = relative(resolvedReposDir, resolvedRepoPath);
+
+  // Check if relative path goes outside (starts with '..' or is absolute)
+  if (relativePath.startsWith('..') || resolve(relativePath) === relativePath) {
     throw new Error(
       `Safety check failed: Repository path must be inside ${reposDir}. Got: ${repoPath}`
     );
   }
 
   // Additional safety: don't allow deleting the repos directory itself
-  if (repoPath === reposDir) {
+  if (resolvedRepoPath === resolvedReposDir || relativePath === '') {
     throw new Error('Cannot delete the repos directory itself');
   }
 
-  await rm(repoPath, { recursive: true, force: true });
+  await rm(resolvedRepoPath, { recursive: true, force: true });
 }
 
 /**
@@ -618,21 +628,31 @@ export async function deleteRepoDirectory(repoPath: string): Promise<void> {
  */
 export async function deleteWorktreeDirectory(worktreePath: string): Promise<void> {
   const { rm } = await import('node:fs/promises');
+  const { resolve, relative } = await import('node:path');
 
   // Safety check: ensure we're only deleting from ~/.agor/worktrees/
   const worktreesDir = join(homedir(), '.agor', 'worktrees');
-  if (!worktreePath.startsWith(worktreesDir)) {
+
+  // Resolve both paths to eliminate symlinks, '..' segments, etc.
+  const resolvedWorktreePath = resolve(worktreePath);
+  const resolvedWorktreesDir = resolve(worktreesDir);
+
+  // Get relative path from worktreesDir to worktreePath
+  const relativePath = relative(resolvedWorktreesDir, resolvedWorktreePath);
+
+  // Check if relative path goes outside (starts with '..' or is absolute)
+  if (relativePath.startsWith('..') || resolve(relativePath) === relativePath) {
     throw new Error(
       `Safety check failed: Worktree path must be inside ${worktreesDir}. Got: ${worktreePath}`
     );
   }
 
   // Additional safety: don't allow deleting the worktrees directory itself
-  if (worktreePath === worktreesDir) {
+  if (resolvedWorktreePath === resolvedWorktreesDir || relativePath === '') {
     throw new Error('Cannot delete the worktrees directory itself');
   }
 
-  await rm(worktreePath, { recursive: true, force: true });
+  await rm(resolvedWorktreePath, { recursive: true, force: true });
 }
 
 /**

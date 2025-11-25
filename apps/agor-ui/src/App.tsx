@@ -650,9 +650,16 @@ function AppContent() {
         showSuccess('Repository removed from Agor (files preserved)');
       }
     } catch (error) {
-      showError(
-        `Failed to delete repository: ${error instanceof Error ? error.message : String(error)}`
-      );
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // Check if this is a partial failure (database deleted but filesystem failed)
+      if (errorMessage.includes('deleted from database, but') && errorMessage.includes('filesystem deletion(s) failed')) {
+        showError(
+          `Repository removed from database, but some files could not be deleted. ${errorMessage}`
+        );
+      } else {
+        showError(`Failed to delete repository: ${errorMessage}`);
+      }
     }
   };
 

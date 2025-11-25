@@ -468,11 +468,11 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
     if (cleanup && repo.repo_type === 'remote') {
       const { deleteRepoDirectory, deleteWorktreeDirectory } = await import('@agor/core/git');
 
-      // Get all worktrees for this repo
+      // Get ALL worktrees for this repo (no limit - ensure complete cleanup)
       const worktreesService = this.app.service('worktrees');
       const worktreesResult = await worktreesService.find({
         ...params,
-        query: { repo_id: repo.repo_id, $limit: 1000 },
+        query: { repo_id: repo.repo_id },
         paginate: false,
       });
 
@@ -480,16 +480,18 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
         Array.isArray(worktreesResult) ? worktreesResult : worktreesResult.data
       ) as Worktree[];
 
+      // Track filesystem cleanup failures
+      const failures: Array<{ path: string; error: string }> = [];
+
       // Delete worktree directories from filesystem
       for (const worktree of worktrees) {
         try {
           await deleteWorktreeDirectory(worktree.path);
           console.log(`🗑️  Deleted worktree directory: ${worktree.path}`);
         } catch (error) {
-          console.warn(
-            `⚠️  Failed to delete worktree directory ${worktree.path}:`,
-            error instanceof Error ? error.message : String(error)
-          );
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          console.warn(`⚠️  Failed to delete worktree directory ${worktree.path}:`, errorMsg);
+          failures.push({ path: worktree.path, error: errorMsg });
         }
       }
 
@@ -498,9 +500,16 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
         await deleteRepoDirectory(repo.local_path);
         console.log(`🗑️  Deleted repository directory: ${repo.local_path}`);
       } catch (error) {
-        console.warn(
-          `⚠️  Failed to delete repository directory ${repo.local_path}:`,
-          error instanceof Error ? error.message : String(error)
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.warn(`⚠️  Failed to delete repository directory ${repo.local_path}:`, errorMsg);
+        failures.push({ path: repo.local_path, error: errorMsg });
+      }
+
+      // If any filesystem deletions failed, throw an error to inform the caller
+      if (failures.length > 0) {
+        const failureDetails = failures.map((f) => `${f.path}: ${f.error}`).join('; ');
+        throw new Error(
+          `Repository deleted from database, but ${failures.length} filesystem deletion(s) failed: ${failureDetails}`
         );
       }
     }
