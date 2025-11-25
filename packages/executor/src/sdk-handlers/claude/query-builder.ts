@@ -359,28 +359,79 @@ export async function setupQuery(
     }
     // CASE 2: Normal resume (session has its own sdk_session_id)
     else if (session?.sdk_session_id) {
-      // Check if session might be stale (prevents exit code 1 errors)
-      const hoursSinceUpdate = session.last_updated
-        ? (Date.now() - new Date(session.last_updated).getTime()) / (1000 * 60 * 60)
-        : 999;
+      // Check if MCP servers were added after session creation
+      // Claude Agent SDK locks in MCP configuration at session creation time
+      // If MCP servers were added later, we need to start fresh to pick them up
+      let mcpServersAddedAfterCreation = false;
+      if (deps.sessionMCPRepo) {
+        try {
+          const sessionMCPServers = await deps.sessionMCPRepo.listServersWithMetadata(
+            sessionId,
+            true
+          );
+          const sessionCreatedAt = new Date(session.created_at).getTime();
+          const sessionLastUpdated = session.last_updated
+            ? new Date(session.last_updated).getTime()
+            : sessionCreatedAt;
+          const sessionReferenceTime = Math.max(sessionCreatedAt, sessionLastUpdated);
 
-      const isLikelyStale =
-        hoursSinceUpdate > 24 || // Session older than 24 hours
-        !session.worktree_id; // No worktree = can't resume properly
+          for (const sms of sessionMCPServers) {
+            if (sms.enabled && sms.added_at > sessionReferenceTime) {
+              mcpServersAddedAfterCreation = true;
+              const minutesAfterReference = Math.round(
+                (sms.added_at - sessionReferenceTime) / 1000 / 60
+              );
+              console.warn(
+                `⚠️  [MCP] Server "${sms.server.name}" was added ${minutesAfterReference} minute(s) after the session last updated`
+              );
+              break;
+            }
+          }
+        } catch (error) {
+          console.warn('⚠️  Failed to check MCP server timestamps:', error);
+        }
+      }
 
-      if (isLikelyStale) {
+      if (mcpServersAddedAfterCreation) {
         console.warn(
-          `⚠️  Resume session ${session.sdk_session_id.substring(0, 8)} appears stale (${Math.round(hoursSinceUpdate)}h old) - starting fresh`
+          `⚠️  [MCP] MCP servers were added after the last SDK sync - current session won't see them!`
+        );
+        console.warn(`   🔧 SOLUTION: Clearing sdk_session_id to force fresh session start`);
+        console.warn(
+          `   Previous SDK session: ${session.sdk_session_id.substring(0, 8)} (will be discarded)`
         );
 
-        // Clear stale session ID to prevent exit code 1
+        // Clear SDK session ID to force fresh start with new MCP config
         if (deps.sessionsRepo) {
           await deps.sessionsRepo.update(sessionId, { sdk_session_id: undefined });
+          // Update in-memory session object to match database
+          session.sdk_session_id = undefined;
         }
         // Don't set queryOptions.resume - start fresh
       } else {
-        queryOptions.resume = session.sdk_session_id;
-        console.log(`   Resuming SDK session: ${session.sdk_session_id.substring(0, 8)}`);
+        // Check if session might be stale (prevents exit code 1 errors)
+        const hoursSinceUpdate = session.last_updated
+          ? (Date.now() - new Date(session.last_updated).getTime()) / (1000 * 60 * 60)
+          : 999;
+
+        const isLikelyStale =
+          hoursSinceUpdate > 24 || // Session older than 24 hours
+          !session.worktree_id; // No worktree = can't resume properly
+
+        if (isLikelyStale) {
+          console.warn(
+            `⚠️  Resume session ${session.sdk_session_id.substring(0, 8)} appears stale (${Math.round(hoursSinceUpdate)}h old) - starting fresh`
+          );
+
+          // Clear stale session ID to prevent exit code 1
+          if (deps.sessionsRepo) {
+            await deps.sessionsRepo.update(sessionId, { sdk_session_id: undefined });
+          }
+          // Don't set queryOptions.resume - start fresh
+        } else {
+          queryOptions.resume = session.sdk_session_id;
+          console.log(`   Resuming SDK session: ${session.sdk_session_id.substring(0, 8)}`);
+        }
       }
     }
     // CASE 3: Fresh session (no genealogy, no sdk_session_id)
@@ -426,63 +477,71 @@ export async function setupQuery(
         source: string;
       }> = [];
 
-      // 1. Global servers (always included)
-      console.log('🔌 Fetching MCP servers with hierarchical scoping...');
-      const globalServers = await deps.mcpServerRepo?.findAll({
-        scope: 'global',
-        enabled: true,
-      });
-      console.log(`   📍 Global scope: ${globalServers?.length ?? 0} server(s)`);
-      for (const server of globalServers ?? []) {
-        allServers.push({ server, source: 'global' });
-      }
-
-      // 2. Repo-scoped servers (if session has a worktree)
-      // Get repo_id from the worktree
-      let repoId: string | undefined;
-      // Note: session is guaranteed non-null due to check at line 331-332
-      // Using non-null assertions due to TypeScript's control flow analysis limitations with class properties
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      const worktreeId = session!.worktree_id;
-      if (worktreeId && deps.worktreesRepo) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const worktree = await deps.worktreesRepo!.findById(worktreeId);
-        repoId = worktree?.repo_id;
-      }
-      if (repoId) {
-        const repoServers = await deps.mcpServerRepo?.findAll({
-          scope: 'repo',
-          scopeId: repoId,
-          enabled: true,
-        });
-        console.log(`   📍 Repo scope: ${repoServers?.length ?? 0} server(s)`);
-        for (const server of repoServers ?? []) {
-          allServers.push({ server, source: 'repo' });
-        }
-      }
-
-      // 3. Team-scoped servers (if session has a team - future feature)
-      // if (session.team_id) {
-      //   const teamServers = await deps.mcpServerRepo.findAll({
-      //     scope: 'team',
-      //     scopeId: session.team_id,
-      //     enabled: true,
-      //   });
-      //   console.log(`   📍 Team scope: ${teamServers.length} server(s)`);
-      //   for (const server of teamServers) {
-      //     allServers.push({ server, source: 'team' });
-      //   }
-      // }
-
-      // 4. Session-specific servers (from join table)
+      // Check if session has explicitly configured MCP servers
+      // biome-ignore lint/suspicious/noExplicitAny: MCPServer type from repository
+      let sessionServers: any[] = [];
       if (session && deps.sessionMCPRepo) {
-        const sessionServers = await deps.sessionMCPRepo!.listServers(sessionId, true); // enabledOnly
-        console.log(`   📍 Session scope: ${sessionServers!.length} server(s)`);
-        for (const server of sessionServers!) {
+        sessionServers = await deps.sessionMCPRepo!.listServers(sessionId, true); // enabledOnly
+      }
+
+      // If session has explicit MCP servers, use ONLY those (no hierarchical inheritance)
+      // This allows sessions to have isolated MCP configurations
+      if (sessionServers.length > 0) {
+        console.log('🔌 Using session-specific MCP servers (isolated mode)...');
+        console.log(`   📍 Session scope: ${sessionServers.length} server(s)`);
+        for (const server of sessionServers) {
           allServers.push({ server, source: 'session' });
         }
       } else {
-        console.log('   📍 Session scope: 0 server(s)');
+        // Session has no explicit MCP servers - fall back to hierarchical scoping
+        console.log('🔌 Fetching MCP servers with hierarchical scoping...');
+
+        // 1. Global servers
+        const globalServers = await deps.mcpServerRepo?.findAll({
+          scope: 'global',
+          enabled: true,
+        });
+        console.log(`   📍 Global scope: ${globalServers?.length ?? 0} server(s)`);
+        for (const server of globalServers ?? []) {
+          allServers.push({ server, source: 'global' });
+        }
+
+        // 2. Repo-scoped servers (if session has a worktree)
+        // Get repo_id from the worktree
+        let repoId: string | undefined;
+        // Note: session is guaranteed non-null due to check at line 331-332
+        // Using non-null assertions due to TypeScript's control flow analysis limitations with class properties
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const worktreeId = session!.worktree_id;
+        if (worktreeId && deps.worktreesRepo) {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          const worktree = await deps.worktreesRepo!.findById(worktreeId);
+          repoId = worktree?.repo_id;
+        }
+        if (repoId) {
+          const repoServers = await deps.mcpServerRepo?.findAll({
+            scope: 'repo',
+            scopeId: repoId,
+            enabled: true,
+          });
+          console.log(`   📍 Repo scope: ${repoServers?.length ?? 0} server(s)`);
+          for (const server of repoServers ?? []) {
+            allServers.push({ server, source: 'repo' });
+          }
+        }
+
+        // 3. Team-scoped servers (if session has a team - future feature)
+        // if (session.team_id) {
+        //   const teamServers = await deps.mcpServerRepo.findAll({
+        //     scope: 'team',
+        //     scopeId: session.team_id,
+        //     enabled: true,
+        //   });
+        //   console.log(`   📍 Team scope: ${teamServers.length} server(s)`);
+        //   for (const server of teamServers) {
+        //     allServers.push({ server, source: 'team' });
+        //   }
+        // }
       }
 
       // 5. Deduplicate by server ID (later scopes override earlier ones)

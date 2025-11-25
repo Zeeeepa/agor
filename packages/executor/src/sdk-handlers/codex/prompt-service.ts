@@ -588,6 +588,54 @@ export class CodexPromptService {
       sandboxMode,
     };
 
+    // Check if MCP servers were added after session creation
+    // Codex SDK locks in MCP configuration at thread creation time
+    // If MCP servers were added later, we need to start fresh to pick them up
+    let mcpServersAddedAfterCreation = false;
+    if (this.sessionMCPServerRepo && session.sdk_session_id) {
+      try {
+        const sessionMCPServers = await this.sessionMCPServerRepo.listServersWithMetadata(
+          sessionId,
+          true
+        );
+        const sessionCreatedAt = new Date(session.created_at).getTime();
+        const sessionLastUpdated = session.last_updated
+          ? new Date(session.last_updated).getTime()
+          : sessionCreatedAt;
+        const sessionReferenceTime = Math.max(sessionCreatedAt, sessionLastUpdated);
+
+        for (const sms of sessionMCPServers) {
+          if (sms.enabled && sms.added_at > sessionReferenceTime) {
+            mcpServersAddedAfterCreation = true;
+            const minutesAfterReference = Math.round(
+              (sms.added_at - sessionReferenceTime) / 1000 / 60
+            );
+            console.warn(
+              `⚠️  [Codex MCP] Server "${sms.server.name}" was added ${minutesAfterReference} minute(s) after the session last updated`
+            );
+            break;
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️  [Codex] Failed to check MCP server timestamps:', error);
+      }
+    }
+
+    if (mcpServersAddedAfterCreation && session.sdk_session_id) {
+      console.warn(
+        `⚠️  [Codex MCP] MCP servers were added after the last SDK sync - current thread won't see them!`
+      );
+      console.warn(`   🔧 SOLUTION: Clearing sdk_session_id to force fresh thread start`);
+      console.warn(
+        `   Previous SDK thread: ${session.sdk_session_id.substring(0, 8)} (will be discarded)`
+      );
+
+      // Clear SDK session ID to force fresh start with new MCP config
+      await this.sessionsRepo.update(sessionId, { sdk_session_id: undefined });
+      // Update local session object to reflect the change
+      session.sdk_session_id = undefined;
+    }
+
     // Check if we need to update thread settings due to approval policy change
     const previousApprovalPolicy = session.permission_config?.codex?.approvalPolicy || 'on-request';
     const approvalPolicyChanged = approvalPolicy !== previousApprovalPolicy;
@@ -596,19 +644,6 @@ export class CodexPromptService {
     let thread: Thread;
     if (session.sdk_session_id) {
       console.log(`🔄 [Codex] Resuming thread: ${session.sdk_session_id}`);
-
-      // IMPORTANT: Codex threads lock in MCP configuration at creation time
-      // If MCP servers are configured now, warn that they might not be available in existing thread
-      if (mcpServerCount > 0) {
-        console.warn('⚠️  [Codex MCP] MCP servers are configured for this session.');
-        console.warn(
-          "   ⚠️  If this thread was created BEFORE MCP servers were added, it won't see them!"
-        );
-        console.warn('   🔧 SOLUTION: Create a NEW Agor session to pick up MCP servers.');
-        console.warn(
-          `   Current thread: ${session.sdk_session_id} (check if MCP servers are missing)`
-        );
-      }
 
       thread = this.codex.resumeThread(session.sdk_session_id, threadOptions);
 

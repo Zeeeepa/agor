@@ -207,6 +207,51 @@ export class FeathersSessionMCPServersRepository {
 
     return servers;
   }
+
+  /**
+   * List MCP servers for a session with relationship metadata (added_at timestamp)
+   * Used to detect if servers were added after session creation
+   * @param sessionId - Session ID
+   * @param enabledOnly - If true, only return enabled servers
+   * @returns Array of objects with server and metadata
+   */
+  async listServersWithMetadata(
+    sessionId: SessionID,
+    enabledOnly = false
+  ): Promise<Array<{ server: MCPServer; added_at: number; enabled: boolean }>> {
+    // Get session-mcp-server join records
+    const query: Record<string, unknown> = {
+      session_id: sessionId,
+      $limit: 1000,
+    };
+
+    if (enabledOnly) {
+      query.enabled = true;
+    }
+
+    const sessionMCPService = this.client.service('session-mcp-servers');
+    const result = await sessionMCPService.find({ query });
+    const sessionMCPServers = (Array.isArray(result) ? result : result.data) as SessionMCPServer[];
+
+    // Get full MCPServer objects with metadata for each join record
+    const mcpServerService = this.client.service('mcp-servers');
+    const results: Array<{ server: MCPServer; added_at: number; enabled: boolean }> = [];
+
+    for (const link of sessionMCPServers) {
+      try {
+        const server = await mcpServerService.get(link.mcp_server_id);
+        results.push({
+          server,
+          added_at: new Date(link.added_at).getTime(), // Convert to timestamp
+          enabled: Boolean(link.enabled),
+        });
+      } catch (_error) {
+        // Skip servers that can't be fetched
+      }
+    }
+
+    return results;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════

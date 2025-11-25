@@ -99,8 +99,12 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
             <Input placeholder="npx" />
           </Form.Item>
 
-          <Form.Item label="Arguments" name="args" tooltip="Comma-separated arguments">
-            <Input placeholder="@modelcontextprotocol/server-filesystem, /allowed/path" />
+          <Form.Item
+            label="Arguments"
+            name="args"
+            tooltip="Comma-separated arguments. Each argument will be passed separately to the command. Example: -y, @modelcontextprotocol/server-filesystem, /allowed/path"
+          >
+            <Input placeholder="-y, @modelcontextprotocol/server-filesystem, /allowed/path" />
           </Form.Item>
         </>
       ) : (
