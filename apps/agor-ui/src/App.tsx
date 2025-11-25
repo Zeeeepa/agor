@@ -652,12 +652,20 @@ function AppContent() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      // Check if this is a filesystem failure (fail-fast behavior - nothing deleted)
-      if (errorMessage.includes('Cannot delete repository:') && errorMessage.includes('filesystem deletion(s) failed')) {
+      // Check for partial deletion (some files deleted, some failed)
+      if (errorMessage.includes('Partial deletion occurred:')) {
         showError(
-          `Filesystem cleanup failed. Repository and files are still present. ${errorMessage}`
+          `⚠️ PARTIAL DELETION: Some files were permanently deleted. ${errorMessage}`
         );
-      } else {
+      }
+      // Check for complete failure (no files deleted)
+      else if (errorMessage.includes('No files were deleted')) {
+        showError(
+          `Deletion failed, but no files were removed. ${errorMessage}`
+        );
+      }
+      // Generic failure
+      else {
         showError(`Failed to delete repository: ${errorMessage}`);
       }
     }

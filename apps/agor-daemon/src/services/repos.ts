@@ -484,31 +484,50 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
         Array.isArray(worktreesResult) ? worktreesResult : worktreesResult.data
       ) as Worktree[];
 
+      // Track successfully deleted paths for honest error reporting
+      const deletedPaths: string[] = [];
+
       // FAIL FAST: Stop on first filesystem deletion failure
       // Delete worktree directories from filesystem
       for (const worktree of worktrees) {
         try {
           await deleteWorktreeDirectory(worktree.path);
+          deletedPaths.push(worktree.path);
           console.log(`🗑️  Deleted worktree directory: ${worktree.path}`);
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
           console.error(`❌ Failed to delete worktree directory ${worktree.path}:`, errorMsg);
-          // Stop immediately - don't delete anything else
-          throw new Error(
-            `Cannot delete repository: Failed to delete worktree at ${worktree.path}: ${errorMsg}. Please fix this issue and retry.`
-          );
+
+          // Be honest about partial deletion
+          if (deletedPaths.length > 0) {
+            throw new Error(
+              `Partial deletion occurred: Successfully deleted ${deletedPaths.length} path(s): ${deletedPaths.join(', ')}. ` +
+                `Failed at ${worktree.path}: ${errorMsg}. ` +
+                `Database NOT modified. Manual cleanup required for deleted paths.`
+            );
+          } else {
+            throw new Error(
+              `Cannot delete repository: Failed to delete worktree at ${worktree.path}: ${errorMsg}. ` +
+                `No files were deleted. Please fix this issue and retry.`
+            );
+          }
         }
       }
 
       // Delete repository directory from filesystem
       try {
         await deleteRepoDirectory(repo.local_path);
+        deletedPaths.push(repo.local_path);
         console.log(`🗑️  Deleted repository directory: ${repo.local_path}`);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         console.error(`❌ Failed to delete repository directory ${repo.local_path}:`, errorMsg);
+
+        // Be honest about partial deletion (worktrees were deleted, repo failed)
         throw new Error(
-          `Cannot delete repository: Failed to delete repository directory at ${repo.local_path}: ${errorMsg}. Please fix this issue and retry.`
+          `Partial deletion occurred: Successfully deleted ${deletedPaths.length} path(s): ${deletedPaths.join(', ')}. ` +
+            `Failed to delete repository directory at ${repo.local_path}: ${errorMsg}. ` +
+            `Database NOT modified. Manual cleanup required for deleted paths.`
         );
       }
 
