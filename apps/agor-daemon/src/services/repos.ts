@@ -454,6 +454,60 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
 
     return { path: agorYmlPath };
   }
+
+  /**
+   * Override remove to support filesystem cleanup
+   *
+   * Supports query parameter: ?cleanup=true to delete filesystem directories
+   */
+  async remove(id: string, params?: RepoParams): Promise<Repo> {
+    const repo = await this.get(id, params);
+    const cleanup = params?.query?.cleanup === true || params?.query?.cleanup === 'true';
+
+    // If cleanup is requested and this is a remote repo, delete filesystem directories
+    if (cleanup && repo.repo_type === 'remote') {
+      const { deleteRepoDirectory, deleteWorktreeDirectory } = await import('@agor/core/git');
+
+      // Get all worktrees for this repo
+      const worktreesService = this.app.service('worktrees');
+      const worktreesResult = await worktreesService.find({
+        ...params,
+        query: { repo_id: repo.repo_id, $limit: 1000 },
+        paginate: false,
+      });
+
+      const worktrees = (
+        Array.isArray(worktreesResult) ? worktreesResult : worktreesResult.data
+      ) as Worktree[];
+
+      // Delete worktree directories from filesystem
+      for (const worktree of worktrees) {
+        try {
+          await deleteWorktreeDirectory(worktree.path);
+          console.log(`🗑️  Deleted worktree directory: ${worktree.path}`);
+        } catch (error) {
+          console.warn(
+            `⚠️  Failed to delete worktree directory ${worktree.path}:`,
+            error instanceof Error ? error.message : String(error)
+          );
+        }
+      }
+
+      // Delete repository directory from filesystem
+      try {
+        await deleteRepoDirectory(repo.local_path);
+        console.log(`🗑️  Deleted repository directory: ${repo.local_path}`);
+      } catch (error) {
+        console.warn(
+          `⚠️  Failed to delete repository directory ${repo.local_path}:`,
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    }
+
+    // Delete from database using parent class method
+    return super.remove(id, params) as Promise<Repo>;
+  }
 }
 
 /**

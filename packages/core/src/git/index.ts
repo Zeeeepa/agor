@@ -581,6 +581,61 @@ export async function getGitState(repoPath: string): Promise<string> {
 }
 
 /**
+ * Delete a repository directory from filesystem
+ *
+ * Removes the repository directory and all its contents from ~/.agor/repos/.
+ * This is typically used when deleting a remote repository that was cloned by Agor.
+ *
+ * @param repoPath - Absolute path to the repository directory
+ * @throws Error if the path is not inside ~/.agor/repos/ (safety check)
+ */
+export async function deleteRepoDirectory(repoPath: string): Promise<void> {
+  const { rm } = await import('node:fs/promises');
+
+  // Safety check: ensure we're only deleting from ~/.agor/repos/
+  const reposDir = getReposDir();
+  if (!repoPath.startsWith(reposDir)) {
+    throw new Error(
+      `Safety check failed: Repository path must be inside ${reposDir}. Got: ${repoPath}`
+    );
+  }
+
+  // Additional safety: don't allow deleting the repos directory itself
+  if (repoPath === reposDir) {
+    throw new Error('Cannot delete the repos directory itself');
+  }
+
+  await rm(repoPath, { recursive: true, force: true });
+}
+
+/**
+ * Delete a worktree directory from filesystem
+ *
+ * Removes the worktree directory and all its contents from ~/.agor/worktrees/.
+ *
+ * @param worktreePath - Absolute path to the worktree directory
+ * @throws Error if the path is not inside ~/.agor/worktrees/ (safety check)
+ */
+export async function deleteWorktreeDirectory(worktreePath: string): Promise<void> {
+  const { rm } = await import('node:fs/promises');
+
+  // Safety check: ensure we're only deleting from ~/.agor/worktrees/
+  const worktreesDir = join(homedir(), '.agor', 'worktrees');
+  if (!worktreePath.startsWith(worktreesDir)) {
+    throw new Error(
+      `Safety check failed: Worktree path must be inside ${worktreesDir}. Got: ${worktreePath}`
+    );
+  }
+
+  // Additional safety: don't allow deleting the worktrees directory itself
+  if (worktreePath === worktreesDir) {
+    throw new Error('Cannot delete the worktrees directory itself');
+  }
+
+  await rm(worktreePath, { recursive: true, force: true });
+}
+
+/**
  * Re-export simpleGit for use in services
  * Allows other packages to use simple-git through @agor/core dependency
  */

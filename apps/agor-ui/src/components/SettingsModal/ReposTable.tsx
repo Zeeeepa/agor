@@ -8,7 +8,6 @@ import {
   Form,
   Input,
   Modal,
-  Popconfirm,
   Radio,
   Space,
   Tag,
@@ -77,7 +76,7 @@ interface ReposTableProps {
   onCreate?: (data: { url: string; slug: string; default_branch: string }) => void;
   onCreateLocal?: (data: { path: string; slug?: string }) => void;
   onUpdate?: (repoId: string, updates: Partial<Repo>) => void;
-  onDelete?: (repoId: string) => void;
+  onDelete?: (repoId: string, cleanup: boolean) => void;
 }
 
 export const ReposTable: React.FC<ReposTableProps> = ({
@@ -92,6 +91,8 @@ export const ReposTable: React.FC<ReposTableProps> = ({
   const [editingRepo, setEditingRepo] = useState<Repo | null>(null);
   const [repoMode, setRepoMode] = useState<'remote' | 'local'>('remote');
   const [repoForm] = Form.useForm();
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [repoToDelete, setRepoToDelete] = useState<Repo | null>(null);
 
   const isEditing = !!editingRepo;
   const isLocalMode = repoMode === 'local';
@@ -117,8 +118,17 @@ export const ReposTable: React.FC<ReposTableProps> = ({
     }
   };
 
-  const handleDeleteRepo = (repoId: string) => {
-    onDelete?.(repoId);
+  const handleOpenDeleteModal = (repo: Repo) => {
+    setRepoToDelete(repo);
+    setDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = (cleanup: boolean) => {
+    if (repoToDelete) {
+      onDelete?.(repoToDelete.repo_id, cleanup);
+      setDeleteModalOpen(false);
+      setRepoToDelete(null);
+    }
   };
 
   const handleOpenCreateModal = () => {
@@ -268,30 +278,13 @@ export const ReposTable: React.FC<ReposTableProps> = ({
                       icon={<EditOutlined />}
                       onClick={() => handleOpenEditModal(repo)}
                     />
-                    <Popconfirm
-                      title="Delete repository?"
-                      description={
-                        <>
-                          <p>Are you sure you want to delete "{repo.name}"?</p>
-                          {isLocal ? (
-                            <p style={{ color: '#ff4d4f' }}>
-                              ⚠️ This removes the repository from Agor. Your local files at{' '}
-                              <code>{repo.local_path}</code> will remain untouched.
-                            </p>
-                          ) : (
-                            <p style={{ color: '#ff4d4f' }}>
-                              ⚠️ This will delete the Agor-managed clone and associated worktrees.
-                            </p>
-                          )}
-                        </>
-                      }
-                      onConfirm={() => handleDeleteRepo(repo.repo_id)}
-                      okText="Delete"
-                      cancelText="Cancel"
-                      okButtonProps={{ danger: true }}
-                    >
-                      <Button type="text" size="small" icon={<DeleteOutlined />} danger />
-                    </Popconfirm>
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      danger
+                      onClick={() => handleOpenDeleteModal(repo)}
+                    />
                   </Space>
                 }
               >
@@ -425,6 +418,88 @@ export const ReposTable: React.FC<ReposTableProps> = ({
             </Form.Item>
           )}
         </Form>
+      </Modal>
+
+      {/* Delete Repository Modal */}
+      <Modal
+        title="Delete Repository"
+        open={deleteModalOpen}
+        onCancel={() => {
+          setDeleteModalOpen(false);
+          setRepoToDelete(null);
+        }}
+        footer={null}
+      >
+        {repoToDelete && (
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            <Typography.Text>
+              How would you like to delete{' '}
+              <Typography.Text strong>"{repoToDelete.name}"</Typography.Text>?
+            </Typography.Text>
+
+            {repoToDelete.repo_type === 'local' ? (
+              // For local repos, only show database removal option
+              <Card
+                style={{ marginBottom: 8 }}
+                styles={{ body: { padding: 16 } }}
+              >
+                <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                  <Typography.Text strong>Remove from Agor</Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    Remove this repository from Agor's database only. Your local files at{' '}
+                    <Typography.Text code>{repoToDelete.local_path}</Typography.Text> will remain
+                    untouched.
+                  </Typography.Text>
+                  <Button
+                    danger
+                    onClick={() => handleConfirmDelete(false)}
+                    style={{ marginTop: 8 }}
+                  >
+                    Remove from Agor
+                  </Button>
+                </Space>
+              </Card>
+            ) : (
+              // For remote repos, show both options
+              <>
+                <Card
+                  style={{ marginBottom: 8 }}
+                  styles={{ body: { padding: 16 } }}
+                >
+                  <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                    <Typography.Text strong>Remove from Agor (Keep Files)</Typography.Text>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      Remove from database only. Repository and worktree directories in{' '}
+                      <Typography.Text code>~/.agor/repos/</Typography.Text> and{' '}
+                      <Typography.Text code>~/.agor/worktrees/</Typography.Text> will remain on
+                      disk.
+                    </Typography.Text>
+                    <Button onClick={() => handleConfirmDelete(false)} style={{ marginTop: 8 }}>
+                      Keep Files
+                    </Button>
+                  </Space>
+                </Card>
+
+                <Card styles={{ body: { padding: 16 } }}>
+                  <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                    <Typography.Text strong>Delete Completely (Remove Files)</Typography.Text>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      ⚠️ Remove from database AND delete all filesystem directories (repository +
+                      worktrees). This will free up disk space but cannot be undone.
+                    </Typography.Text>
+                    <Button
+                      danger
+                      onClick={() => handleConfirmDelete(true)}
+                      style={{ marginTop: 8 }}
+                    >
+                      Delete Files
+                    </Button>
+                  </Space>
+                </Card>
+              </>
+            )}
+          </Space>
+        )}
       </Modal>
     </div>
   );
