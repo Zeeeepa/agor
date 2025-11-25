@@ -366,7 +366,7 @@ export async function setupQuery(
       if (deps.sessionMCPRepo) {
         try {
           const sessionMCPServers = await deps.sessionMCPRepo.listServersWithMetadata(sessionId);
-          const sessionCreatedAt = session.created_at;
+          const sessionCreatedAt = new Date(session.created_at).getTime();
 
           for (const sms of sessionMCPServers) {
             if (sms.added_at > sessionCreatedAt) {
