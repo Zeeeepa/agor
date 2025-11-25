@@ -468,21 +468,21 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
     const repo = await this.get(id, params);
     const cleanup = params?.query?.cleanup === true || params?.query?.cleanup === 'true';
 
+    // Get ALL worktrees for this repo (needed for both filesystem and database cleanup)
+    const worktreesService = this.app.service('worktrees');
+    const worktreesResult = await worktreesService.find({
+      ...params,
+      query: { repo_id: repo.repo_id },
+      paginate: false,
+    });
+
+    const worktrees = (
+      Array.isArray(worktreesResult) ? worktreesResult : worktreesResult.data
+    ) as Worktree[];
+
     // If cleanup is requested and this is a remote repo, delete filesystem directories FIRST
     if (cleanup && repo.repo_type === 'remote') {
       const { deleteRepoDirectory, deleteWorktreeDirectory } = await import('@agor/core/git');
-
-      // Get ALL worktrees for this repo (no limit - ensure complete cleanup)
-      const worktreesService = this.app.service('worktrees');
-      const worktreesResult = await worktreesService.find({
-        ...params,
-        query: { repo_id: repo.repo_id },
-        paginate: false,
-      });
-
-      const worktrees = (
-        Array.isArray(worktreesResult) ? worktreesResult : worktreesResult.data
-      ) as Worktree[];
 
       // Track successfully deleted paths for honest error reporting
       const deletedPaths: string[] = [];
@@ -539,20 +539,11 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
     // Only reach here if filesystem cleanup succeeded (or wasn't requested)
     // Now safe to delete from database
 
-    // IMPORTANT: Manually delete worktrees first because foreign key cascades
-    // may not be reliable (pragmas are set async in fire-and-forget mode)
-    const worktreesService = this.app.service('worktrees');
-    const worktreesResult = await worktreesService.find({
-      ...params,
-      query: { repo_id: repo.repo_id },
-      paginate: false,
-    });
-
-    const worktrees = (
-      Array.isArray(worktreesResult) ? worktreesResult : worktreesResult.data
-    ) as Worktree[];
-
-    // Delete all worktrees from database
+    // IMPORTANT: Use Feathers service to delete worktrees (not direct DB cascade) because:
+    // 1. WebSocket events broadcast to all clients (real-time UI updates)
+    // 2. Service hooks run properly (lifecycle, validation, etc.)
+    // 3. Session cascades trigger (sessions → tasks → messages)
+    // 4. Foreign key cascades may not be reliable (pragmas are async fire-and-forget)
     for (const worktree of worktrees) {
       try {
         await worktreesService.remove(worktree.worktree_id, params);
