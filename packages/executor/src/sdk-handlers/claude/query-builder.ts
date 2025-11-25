@@ -393,6 +393,8 @@ export async function setupQuery(
         // Clear SDK session ID to force fresh start with new MCP config
         if (deps.sessionsRepo) {
           await deps.sessionsRepo.update(sessionId, { sdk_session_id: undefined });
+          // Update in-memory session object to match database
+          session.sdk_session_id = undefined;
         }
         // Don't set queryOptions.resume - start fresh
       } else {
