@@ -484,9 +484,7 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
         Array.isArray(worktreesResult) ? worktreesResult : worktreesResult.data
       ) as Worktree[];
 
-      // Track filesystem cleanup failures
-      const failures: Array<{ path: string; error: string }> = [];
-
+      // FAIL FAST: Stop on first filesystem deletion failure
       // Delete worktree directories from filesystem
       for (const worktree of worktrees) {
         try {
@@ -494,8 +492,11 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
           console.log(`🗑️  Deleted worktree directory: ${worktree.path}`);
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
-          console.warn(`⚠️  Failed to delete worktree directory ${worktree.path}:`, errorMsg);
-          failures.push({ path: worktree.path, error: errorMsg });
+          console.error(`❌ Failed to delete worktree directory ${worktree.path}:`, errorMsg);
+          // Stop immediately - don't delete anything else
+          throw new Error(
+            `Cannot delete repository: Failed to delete worktree at ${worktree.path}: ${errorMsg}. Please fix this issue and retry.`
+          );
         }
       }
 
@@ -505,16 +506,9 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
         console.log(`🗑️  Deleted repository directory: ${repo.local_path}`);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        console.warn(`⚠️  Failed to delete repository directory ${repo.local_path}:`, errorMsg);
-        failures.push({ path: repo.local_path, error: errorMsg });
-      }
-
-      // FAIL FAST: If filesystem cleanup failed, abort before touching database
-      // This allows user to fix issues (close files, fix permissions) and retry
-      if (failures.length > 0) {
-        const failureDetails = failures.map((f) => `${f.path}: ${f.error}`).join('; ');
+        console.error(`❌ Failed to delete repository directory ${repo.local_path}:`, errorMsg);
         throw new Error(
-          `Cannot delete repository: ${failures.length} filesystem deletion(s) failed. ${failureDetails}. Please fix these issues and retry.`
+          `Cannot delete repository: Failed to delete repository directory at ${repo.local_path}: ${errorMsg}. Please fix this issue and retry.`
         );
       }
 
