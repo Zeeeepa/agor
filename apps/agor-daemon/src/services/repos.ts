@@ -44,6 +44,7 @@ import { DrizzleService } from '../adapters/drizzle';
 export type RepoParams = QueryParams<{
   slug?: string;
   managed_by_agor?: boolean;
+  cleanup?: boolean; // For delete operations: true = delete filesystem, false = database only
 }>;
 
 async function deriveLocalRepoSlug(path: string, explicitSlug?: string): Promise<RepoSlug> {
