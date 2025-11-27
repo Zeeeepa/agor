@@ -604,6 +604,11 @@ const ZoneNodeComponent = ({ data, selected }: { data: ZoneNodeData; selected?: 
         <div
           style={{
             pointerEvents: 'auto',
+            // Position label to allow for inverse scaling
+            position: 'relative',
+            width: '100%',
+            // Reserve space for scaled label (base font size / zoom)
+            minHeight: `${token.fontSize * scale}px`,
           }}
           onDoubleClick={() => setIsEditingLabel(true)}
         >
@@ -618,7 +623,7 @@ const ZoneNodeComponent = ({ data, selected }: { data: ZoneNodeData; selected?: 
               className="nodrag" // Prevent node drag when typing
               style={{
                 margin: 0,
-                fontSize: '24px',
+                fontSize: token.fontSize,
                 fontWeight: 600,
                 border: 'none',
                 outline: 'none',
@@ -626,15 +631,26 @@ const ZoneNodeComponent = ({ data, selected }: { data: ZoneNodeData; selected?: 
                 color: textColor,
                 padding: 0,
                 width: '100%',
+                // Apply inverse scale to maintain constant visual size during editing
+                transform: `scale(${scale})`,
+                transformOrigin: 'top left',
               }}
             />
           ) : (
             <h3
               style={{
                 margin: 0,
-                fontSize: '24px',
+                fontSize: token.fontSize,
                 fontWeight: 600,
                 color: textColor,
+                // Apply inverse scale to maintain constant visual size (Figma-style)
+                transform: `scale(${scale})`,
+                transformOrigin: 'top left',
+                // Constrain to zone width accounting for padding and scale
+                maxWidth: `${(data.width - token.padding * 2) / scale}px`,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
               }}
             >
               {label}
@@ -644,12 +660,20 @@ const ZoneNodeComponent = ({ data, selected }: { data: ZoneNodeData; selected?: 
         {data.status && (
           <div
             style={{
-              marginTop: '8px',
-              fontSize: '12px',
+              marginTop: `${8 * scale}px`,
+              fontSize: token.fontSizeSM,
               fontWeight: 500,
               color: textColor,
               textTransform: 'uppercase',
               letterSpacing: '0.5px',
+              // Apply inverse scale to maintain constant visual size
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+              // Constrain to zone width accounting for padding and scale
+              maxWidth: `${(data.width - token.padding * 2) / scale}px`,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
             }}
           >
             {data.status}
