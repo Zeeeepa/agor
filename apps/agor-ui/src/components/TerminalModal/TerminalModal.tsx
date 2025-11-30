@@ -1,10 +1,10 @@
 import type { AgorClient } from '@agor/core/api';
 import type { User } from '@agor/core/types';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import { Terminal } from '@xterm/xterm';
 import { App, Modal } from 'antd';
 import { useEffect, useRef, useState } from 'react';
-import { Terminal } from 'xterm';
-import { WebLinksAddon } from 'xterm-addon-web-links';
-import 'xterm/css/xterm.css';
+import '@xterm/xterm/css/xterm.css';
 
 const OSC_SEQUENCE_START = '\u001B]8;';
 const OSC_SEQUENCE_END = '\u001B]8;;\u0007';
