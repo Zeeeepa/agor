@@ -29,6 +29,8 @@ export default class DbStatus extends Command {
   static examples = ['<%= config.bin %> <%= command.id %>'];
 
   async run(): Promise<void> {
+    await this.parse(DbStatus);
+
     try {
       // Determine database URL (same logic as daemon)
       // Priority: DATABASE_URL > AGOR_DB_PATH > default SQLite path
@@ -46,8 +48,12 @@ export default class DbStatus extends Command {
             sql`SELECT table_name as name FROM information_schema.tables WHERE table_schema = 'drizzle' AND table_name = '__drizzle_migrations'`
           );
 
-      const tableCheckResult = tableCheck as QueryResult;
-      if (tableCheckResult.rows.length === 0) {
+      // Handle different return types: SQLite returns {rows: [...]}, PostgreSQL returns [...]
+      const tableCheckRows = isSQLiteDatabase(db)
+        ? (tableCheck as QueryResult).rows
+        : (tableCheck as unknown[]);
+
+      if (tableCheckRows.length === 0) {
         this.log(
           `${chalk.yellow('⚠')} No migrations table found. Run ${chalk.cyan('agor db migrate')} to initialize.`
         );
@@ -63,23 +69,25 @@ export default class DbStatus extends Command {
             sql`SELECT hash, created_at FROM drizzle.__drizzle_migrations ORDER BY created_at ASC`
           );
 
-      const queryResult = result as QueryResult;
-      if (queryResult.rows.length === 0) {
+      // Handle different return types: SQLite returns {rows: [...]}, PostgreSQL returns [...]
+      const rows = isSQLiteDatabase(db) ? (result as QueryResult).rows : (result as unknown[]);
+
+      if (rows.length === 0) {
         this.log('No migrations applied yet');
         return;
       }
 
       this.log(chalk.bold('\nApplied migrations:\n'));
-      queryResult.rows.forEach((row: unknown) => {
+      rows.forEach((row: unknown) => {
         const migration = row as MigrationRow;
-        const date = new Date(migration.created_at);
+        const date = new Date(Number(migration.created_at));
         const formattedDate = date.toLocaleString();
         this.log(
           `  ${chalk.green('✓')} ${chalk.cyan(migration.hash)} ${chalk.dim(`(${formattedDate})`)}`
         );
       });
 
-      this.log(`\n${chalk.bold(`Total: ${queryResult.rows.length} migration(s)`)}`);
+      this.log(`\n${chalk.bold(`Total: ${rows.length} migration(s)`)}`);
     } catch (error) {
       this.error(
         `Failed to get migration status: ${error instanceof Error ? error.message : String(error)}`
