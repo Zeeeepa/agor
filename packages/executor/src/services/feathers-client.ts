@@ -96,16 +96,3 @@ export async function createExecutorClient(
  * Create Feathers client (alias for createExecutorClient for backward compatibility)
  */
 export const createFeathersClient = createExecutorClient;
-
-/**
- * Get daemon URL from environment or use default
- */
-export function getDaemonUrl(): string {
-  // Check environment variables
-  if (process.env.DAEMON_URL) {
-    return process.env.DAEMON_URL;
-  }
-
-  const port = process.env.DAEMON_PORT || process.env.PORT || '3030';
-  return `http://localhost:${port}`;
-}

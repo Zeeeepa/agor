@@ -4,8 +4,8 @@
  * Re-exports configuration utilities used by SDK handlers
  */
 
-// Re-export getDaemonUrl from feathers-client
-export { getDaemonUrl } from './services/feathers-client.js';
+// Re-export getDaemonUrl from core (respects config.yaml)
+export { getDaemonUrl } from '@agor/core';
 
 /**
  * Resolve user environment (cwd, env vars, etc.)
