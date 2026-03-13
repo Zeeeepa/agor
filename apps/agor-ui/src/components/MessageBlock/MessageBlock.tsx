@@ -74,6 +74,7 @@ interface MessageBlockProps {
   isFirstPendingInput?: boolean; // For sequencing input requests
   isLatestMessage?: boolean; // Whether this is the most recent message (don't collapse by default)
   allMessages?: Message[]; // All messages for aggregation (e.g., finding matching compaction events)
+  assistantEmoji?: string; // Emoji override for assistant avatar (replaces tool icon)
   onPermissionDecision?: (
     sessionId: string,
     requestId: string,
@@ -129,6 +130,41 @@ function isTaskToolResult(message: Message): boolean {
   return hasToolResult;
 }
 
+/**
+ * Compute the avatar element for an agent/assistant message.
+ * Centralizes the priority: callback logo > assistant emoji > agentic tool icon > robot fallback.
+ */
+function getAgentAvatar({
+  assistantEmoji,
+  agentic_tool,
+  isCallback,
+  token,
+}: {
+  assistantEmoji?: string;
+  agentic_tool?: string;
+  isCallback?: boolean;
+  token: ReturnType<typeof theme.useToken>['token'];
+}): React.ReactNode {
+  if (isCallback) {
+    return (
+      <img
+        src={`${import.meta.env.BASE_URL}favicon.png`}
+        alt="Agor"
+        style={{ width: 32, height: 32, borderRadius: '50%' }}
+      />
+    );
+  }
+  if (assistantEmoji) {
+    return <AgorAvatar>{assistantEmoji}</AgorAvatar>;
+  }
+  if (agentic_tool) {
+    return <ToolIcon tool={agentic_tool} size={32} />;
+  }
+  return (
+    <AgorAvatar icon={<RobotOutlined />} style={{ backgroundColor: token.colorBgContainer }} />
+  );
+}
+
 export const MessageBlock: React.FC<MessageBlockProps> = ({
   message,
   userById = new Map(),
@@ -143,6 +179,7 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({
   allMessages = [],
   onPermissionDecision,
   onInputResponse,
+  assistantEmoji,
 }) => {
   const { token } = theme.useToken();
 
@@ -402,19 +439,8 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({
         (() => {
           const avatar = isUser ? (
             <AgorAvatar>{userEmoji}</AgorAvatar>
-          ) : isCallback ? (
-            <img
-              src={`${import.meta.env.BASE_URL}favicon.png`}
-              alt="Agor"
-              style={{ width: 32, height: 32, borderRadius: '50%' }}
-            />
-          ) : agentic_tool ? (
-            <ToolIcon tool={agentic_tool} size={32} />
           ) : (
-            <AgorAvatar
-              icon={<RobotOutlined />}
-              style={{ backgroundColor: token.colorBgContainer }}
-            />
+            getAgentAvatar({ assistantEmoji, agentic_tool, isCallback, token })
           );
 
           return (
@@ -500,20 +526,7 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({
       {/* Response text after tools */}
       {hasTextAfter &&
         (() => {
-          const avatar = isCallback ? (
-            <img
-              src={`${import.meta.env.BASE_URL}favicon.png`}
-              alt="Agor"
-              style={{ width: 32, height: 32, borderRadius: '50%' }}
-            />
-          ) : agentic_tool ? (
-            <ToolIcon tool={agentic_tool} size={32} />
-          ) : (
-            <AgorAvatar
-              icon={<RobotOutlined />}
-              style={{ backgroundColor: token.colorBgContainer }}
-            />
-          );
+          const avatar = getAgentAvatar({ assistantEmoji, agentic_tool, isCallback, token });
 
           return (
             <div style={{ margin: `${token.sizeUnit}px 0` }}>

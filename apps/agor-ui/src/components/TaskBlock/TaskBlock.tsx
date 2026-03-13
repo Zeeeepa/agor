@@ -99,6 +99,7 @@ interface TaskBlockProps {
   scheduledFromWorktree?: boolean;
   scheduledRunAt?: number;
   streamingMessages?: Map<MessageID, StreamingMessage>;
+  assistantEmoji?: string;
 }
 
 /**
@@ -357,6 +358,7 @@ export const TaskBlock = React.memo<TaskBlockProps>(
     scheduledFromWorktree,
     scheduledRunAt,
     streamingMessages,
+    assistantEmoji,
   }) => {
     const { token } = theme.useToken();
 
@@ -617,6 +619,7 @@ export const TaskBlock = React.memo<TaskBlockProps>(
                           isLatestMessage={isLatestMessage}
                           taskId={task.task_id}
                           allMessages={messages}
+                          assistantEmoji={assistantEmoji}
                         />
                       );
                     }
@@ -655,7 +658,9 @@ export const TaskBlock = React.memo<TaskBlockProps>(
                     <Bubble
                       placement="start"
                       avatar={
-                        agentic_tool ? (
+                        assistantEmoji ? (
+                          <AgorAvatar>{assistantEmoji}</AgorAvatar>
+                        ) : agentic_tool ? (
                           <ToolIcon tool={agentic_tool} size={32} />
                         ) : (
                           <AgorAvatar
