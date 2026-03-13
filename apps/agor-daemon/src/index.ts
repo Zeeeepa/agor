@@ -40,6 +40,7 @@ const DAEMON_VERSION = await loadDaemonVersion(import.meta.url);
 import {
   and,
   eq,
+  generateId,
   getDatabaseUrl,
   MCPServerRepository,
   MessagesRepository,
@@ -862,6 +863,37 @@ async function main() {
         undefined,
         !!executorUnixUser
       );
+
+      // Validate required user environment variables (if configured)
+      const requiredUserEnvVars = config.execution?.required_user_env_vars;
+      if (requiredUserEnvVars && requiredUserEnvVars.length > 0) {
+        const missingVars = requiredUserEnvVars.filter((v) => !executorEnv[v]);
+        if (missingVars.length > 0) {
+          const missingList = missingVars.map((v) => `\`${v}\``).join(', ');
+          const errorContent = [
+            `**Missing required environment variables:** ${missingList}`,
+            '',
+            'Your administrator requires these variables to be set before running prompts.',
+            '',
+            `**To fix:** Click your user avatar (top-right) → **Settings** → **Environment Variables**, then add values for: ${missingList}`,
+            '',
+            'This is a one-time setup — once configured, this message will not appear again.',
+          ].join('\n');
+          const systemMessage: Partial<Message> = {
+            message_id: generateId() as Message['message_id'],
+            session_id: sessionId as Message['session_id'],
+            task_id: data.taskId as Message['task_id'],
+            type: 'system',
+            role: 'system' as Message['role'],
+            content: errorContent,
+            content_preview: `Missing required env vars: ${missingVars.join(', ')}`,
+            index: session.message_count,
+            timestamp: new Date().toISOString(),
+          };
+          await messagesService.create(systemMessage);
+          throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+        }
+      }
 
       // Add DAEMON_URL to environment so executor can connect back
       executorEnv.DAEMON_URL = daemonUrl;
