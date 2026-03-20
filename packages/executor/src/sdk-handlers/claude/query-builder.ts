@@ -147,6 +147,8 @@ export async function setupQuery(
   getStderr: () => string;
   /** OAuth MCP servers that need authentication before they can be used */
   oauthServersNeedingAuth: Array<{ name: string; serverId: string; url: string }>;
+  /** The user ID whose context was used for this query (session owner or task creator) */
+  contextUserId?: string;
 }> {
   const { taskId, permissionMode, resume = true, abortController } = options;
 
@@ -655,5 +657,6 @@ export async function setupQuery(
     resolvedModel: model,
     getStderr,
     oauthServersNeedingAuth,
+    contextUserId,
   };
 }

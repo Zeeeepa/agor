@@ -3759,6 +3759,7 @@ export function setupMCPRoutes(app: Application, db: Database): void {
               await app.service('mcp-servers/oauth-notify').create(
                 {
                   session_id: context.sessionId,
+                  user_id: context.userId,
                   servers: [
                     {
                       name: server.display_name || server.name,

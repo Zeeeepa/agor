@@ -102,6 +102,7 @@ export class ClaudePromptService {
       query: result,
       getStderr,
       oauthServersNeedingAuth,
+      contextUserId,
     } = await setupQuery(
       sessionId,
       prompt,
@@ -133,9 +134,9 @@ export class ClaudePromptService {
     // Notify UI if OAuth MCP servers need authentication
     if (oauthServersNeedingAuth.length > 0 && this.mcpOAuthNotifyService) {
       try {
-        // Call the daemon's oauth-notify service to broadcast to UI
         await this.mcpOAuthNotifyService.create({
           session_id: sessionId,
+          user_id: contextUserId,
           servers: oauthServersNeedingAuth,
         });
         console.log(
@@ -263,7 +264,11 @@ export class ClaudePromptService {
    * @returns Complete assistant response with metadata
    */
   async promptSession(sessionId: SessionID, prompt: string): Promise<PromptResult> {
-    const { query: result, oauthServersNeedingAuth } = await setupQuery(
+    const {
+      query: result,
+      oauthServersNeedingAuth,
+      contextUserId,
+    } = await setupQuery(
       sessionId,
       prompt,
       {
@@ -295,6 +300,7 @@ export class ClaudePromptService {
       try {
         await this.mcpOAuthNotifyService.create({
           session_id: sessionId,
+          user_id: contextUserId,
           servers: oauthServersNeedingAuth,
         });
       } catch (error) {

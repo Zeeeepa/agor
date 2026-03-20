@@ -159,6 +159,11 @@ export function createSocketIOConfig(
         `🔌 Socket.io connection established: ${socket.id} (user: ${user ? user.user_id.substring(0, 8) : 'anonymous'}, total: ${activeConnections})`
       );
 
+      // Auto-join per-user room for user-scoped events (OAuth prompts, notifications)
+      if (user?.user_id) {
+        socket.join(`user:${user.user_id}`);
+      }
+
       // Log connection lifespan after 5 seconds to identify long-lived connections
       setTimeout(() => {
         if (socket.connected) {
