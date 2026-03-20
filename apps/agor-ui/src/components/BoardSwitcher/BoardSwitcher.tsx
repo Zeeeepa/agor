@@ -1,12 +1,14 @@
 import type { Board, Worktree } from '@agor/core/types';
-import { DownOutlined } from '@ant-design/icons';
+import { DownOutlined, SearchOutlined } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
-import { Badge, Button, Dropdown, Space, Typography, theme } from 'antd';
+import { Badge, Button, Divider, Dropdown, Input, Space, Typography, theme } from 'antd';
 import type React from 'react';
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 const { Text } = Typography;
 const { useToken } = theme;
+
+const FILTER_THRESHOLD = 8;
 
 interface BoardSwitcherProps {
   boards: Board[];
@@ -22,6 +24,8 @@ export const BoardSwitcher: React.FC<BoardSwitcherProps> = ({
   worktreeById,
 }) => {
   const { token } = useToken();
+  const [filterText, setFilterText] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   // Get current board
   const currentBoard = boards.find((b) => b.board_id === currentBoardId);
@@ -45,14 +49,44 @@ export const BoardSwitcher: React.FC<BoardSwitcherProps> = ({
     return counts;
   }, [boards, worktreeById]);
 
-  // Build menu items
+  const showFilter = boards.length >= FILTER_THRESHOLD;
+
+  const handleBoardClick = useCallback(
+    (boardId: string) => {
+      onBoardChange(boardId);
+      setDropdownOpen(false);
+      setFilterText('');
+    },
+    [onBoardChange]
+  );
+
+  // Build menu items (board list only — filter input rendered separately via dropdownRender)
   const menuItems: MenuProps['items'] = useMemo(() => {
     // Sort boards alphabetically by name
     const sortedBoards = [...boards].sort((a, b) =>
       a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
     );
 
-    return sortedBoards.map((board) => {
+    // Apply text filter
+    const filteredBoards = filterText
+      ? sortedBoards.filter((board) => board.name.toLowerCase().includes(filterText.toLowerCase()))
+      : sortedBoards;
+
+    if (showFilter && filteredBoards.length === 0) {
+      return [
+        {
+          key: '__empty__',
+          label: (
+            <Text type="secondary" style={{ fontStyle: 'italic' }}>
+              No boards found
+            </Text>
+          ),
+          disabled: true,
+        },
+      ];
+    }
+
+    return filteredBoards.map((board) => {
       const worktreeCount = worktreeCountByBoard.get(board.board_id) || 0;
       const isActive = board.board_id === currentBoardId;
 
@@ -81,13 +115,60 @@ export const BoardSwitcher: React.FC<BoardSwitcherProps> = ({
             />
           </div>
         ),
-        onClick: () => onBoardChange(board.board_id),
+        onClick: () => handleBoardClick(board.board_id),
       };
     });
-  }, [boards, currentBoardId, worktreeCountByBoard, onBoardChange, token]);
+  }, [
+    boards,
+    currentBoardId,
+    worktreeCountByBoard,
+    handleBoardClick,
+    token,
+    filterText,
+    showFilter,
+  ]);
 
   return (
-    <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomLeft">
+    <Dropdown
+      menu={{ items: menuItems }}
+      trigger={['click']}
+      placement="bottomLeft"
+      open={dropdownOpen}
+      onOpenChange={(open) => {
+        setDropdownOpen(open);
+        if (!open) {
+          setFilterText('');
+        }
+      }}
+      dropdownRender={(menu) =>
+        showFilter ? (
+          <div
+            style={{
+              backgroundColor: token.colorBgElevated,
+              borderRadius: token.borderRadiusLG,
+              boxShadow: token.boxShadowSecondary,
+            }}
+          >
+            <div style={{ padding: '8px 12px' }}>
+              <Input
+                placeholder="Filter boards..."
+                prefix={<SearchOutlined style={{ color: token.colorTextQuaternary }} />}
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+                size="small"
+                allowClear
+                autoFocus
+                aria-label="Filter boards"
+              />
+            </div>
+            <Divider style={{ margin: 0 }} />
+            <div style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>{menu}</div>
+          </div>
+        ) : (
+          menu
+        )
+      }
+    >
       <Button
         type="text"
         style={{

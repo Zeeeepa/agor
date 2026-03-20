@@ -61,11 +61,51 @@ export interface AppHeaderProps {
     boardId?: BoardID,
     cursorPosition?: { x: number; y: number }
   ) => void; // Navigate to user's board
+  /** Recently visited boards (excluding current) for quick-access pills */
+  recentBoards?: Board[];
   /** Instance label for deployment identification (displayed as a Tag) */
   instanceLabel?: string;
   /** Instance description (markdown) shown in popover around the instance label */
   instanceDescription?: string;
 }
+
+const RecentBoardPills: React.FC<{
+  recentBoards: Board[];
+  onBoardChange: (boardId: string) => void;
+  token: ReturnType<typeof theme.useToken>['token'];
+}> = ({ recentBoards, onBoardChange, token }) => {
+  if (recentBoards.length === 0) return null;
+
+  return (
+    <Space size={4}>
+      {recentBoards.map((board) => (
+        <Tooltip key={board.board_id} title={board.name} placement="bottom">
+          <Button
+            type="text"
+            size="small"
+            aria-label={`Switch to board ${board.name}`}
+            onClick={() => onBoardChange(board.board_id)}
+            style={{
+              width: 30,
+              height: 30,
+              minWidth: 30,
+              padding: 0,
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 16,
+              border: `1px solid ${token.colorBorderSecondary}`,
+              background: token.colorBgElevated,
+            }}
+          >
+            {board.icon || '📋'}
+          </Button>
+        </Tooltip>
+      ))}
+    </Space>
+  );
+};
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
   user,
@@ -92,6 +132,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   worktreeById = new Map(),
   boardById,
   onUserClick,
+  recentBoards = [],
   instanceLabel,
   instanceDescription,
 }) => {
@@ -194,14 +235,21 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           ))}
         <Divider orientation="vertical" style={{ height: 32, margin: '0 8px' }} />
         {currentBoardId && boards.length > 0 && (
-          <div style={{ minWidth: 200 }}>
-            <BoardSwitcher
-              boards={boards}
-              currentBoardId={currentBoardId}
+          <>
+            <div style={{ minWidth: 200 }}>
+              <BoardSwitcher
+                boards={boards}
+                currentBoardId={currentBoardId}
+                onBoardChange={onBoardChange || (() => {})}
+                worktreeById={worktreeById}
+              />
+            </div>
+            <RecentBoardPills
+              recentBoards={recentBoards}
               onBoardChange={onBoardChange || (() => {})}
-              worktreeById={worktreeById}
+              token={token}
             />
-          </div>
+          </>
         )}
         {currentBoardName && (
           <Tooltip title="Toggle session drawer" placement="bottom">
