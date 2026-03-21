@@ -331,6 +331,26 @@ export class ClaudeTool implements ITool {
         await this.captureAgentSessionId(sessionId, capturedAgentSessionId);
       }
 
+      // Handle slash commands discovered (persist to session for UI autocomplete)
+      if (event.type === 'slash_commands_discovered') {
+        if (this.sessionsRepo) {
+          try {
+            // Repository does deep merge in transaction - just pass the keys we want to update
+            await this.sessionsRepo.update(sessionId, {
+              custom_context: {
+                slash_commands: event.slashCommands,
+                skills: event.skills,
+              },
+            });
+            console.log(
+              `📋 Stored ${event.slashCommands.length} slash commands and ${event.skills.length} skills on session`
+            );
+          } catch (error) {
+            console.warn('Failed to persist slash commands to session:', error);
+          }
+        }
+      }
+
       // Handle tool execution start
       if (event.type === 'tool_start') {
         if (this.tasksService && taskId) {

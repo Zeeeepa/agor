@@ -77,6 +77,31 @@ export class ClaudePromptService {
   }
 
   /**
+   * Build help message for CLI-only commands that don't work through the SDK
+   */
+  private buildCLICommandHelpMessage(command: string): string {
+    if (command === 'login') {
+      return `**[Agor system message]**
+
+\`/login\` is a CLI-only command that doesn't work in Agor.
+
+To configure your Anthropic API key:
+
+1. **System Settings → Agentic Tools → Claude Code**
+2. **User Settings → Claude Code**
+3. **For Claude Max Pro plan (OAuth):** You must start a \`claude\` CLI session while logged in as the Agor user
+
+If you continue to see authentication errors, please contact your Agor administrator.`;
+    }
+
+    return `**[Agor system message]**
+
+\`/${command}\` command is not supported by the Claude Agent SDK.
+
+This is a CLI-only command that only works in the standalone Claude Code terminal application, not through Agor's API integration.`;
+  }
+
+  /**
    * Prompt a session using Claude Agent SDK (streaming version with text chunking)
    *
    * Yields both complete assistant messages AND text chunks as they're generated.
@@ -98,6 +123,60 @@ export class ClaudePromptService {
     _chunkCallback?: (messageId: string, chunk: string) => void,
     abortController?: AbortController
   ): AsyncGenerator<ProcessedEvent> {
+    // Intercept CLI-only slash commands and return helpful messages
+    const trimmedPrompt = prompt.trim();
+    const cliOnlyMatch = trimmedPrompt.match(/^\/(\w+)(?:\s|$)/);
+    if (cliOnlyMatch) {
+      const command = cliOnlyMatch[1];
+      const cliOnlyCommands = ['login', 'cost', 'usage', 'help', 'compact', 'clear'];
+
+      if (cliOnlyCommands.includes(command)) {
+        const helpMessage = this.buildCLICommandHelpMessage(command);
+
+        // Yield synthetic complete message
+        yield {
+          type: 'complete',
+          role: MessageRole.ASSISTANT,
+          content: [{ type: 'text', text: helpMessage }],
+          toolUses: undefined,
+          parent_tool_use_id: null,
+          agentSessionId: undefined,
+          resolvedModel: undefined,
+        };
+
+        // Yield result with zero usage
+        yield {
+          type: 'result',
+          raw_sdk_message: {
+            type: 'result',
+            subtype: 'success',
+            duration_ms: 0,
+            duration_api_ms: 0,
+            is_error: false,
+            num_turns: 0,
+            result: '',
+            stop_reason: null,
+            total_cost_usd: 0,
+            usage: {
+              input_tokens: 0,
+              output_tokens: 0,
+              cache_creation_input_tokens: 0,
+              cache_read_input_tokens: 0,
+            },
+            modelUsage: {},
+            permission_denials: [],
+            uuid: '00000000-0000-0000-0000-000000000000',
+            session_id: '00000000-0000-0000-0000-000000000000',
+          },
+          agentSessionId: undefined,
+        };
+
+        // Yield end
+        yield { type: 'end', reason: 'result' };
+        return;
+      }
+    }
+
     const {
       query: result,
       getStderr,

@@ -116,6 +116,12 @@ export type ProcessedEvent =
       };
     }
   | {
+      type: 'slash_commands_discovered';
+      slashCommands: string[];
+      skills: string[];
+      agentSessionId?: string;
+    }
+  | {
       type: 'stopped';
     }
   | {
@@ -151,6 +157,7 @@ interface ProcessorState {
   existingSdkSessionId?: string;
   capturedAgentSessionId?: string;
   messageCount: number;
+  assistantMessageCount: number;
   lastActivityTime: number;
   lastAssistantMessageTime: number;
   resolvedModel?: string;
@@ -167,6 +174,9 @@ interface ProcessorState {
   // Text chunk accumulation buffer
   textChunkBuffer: string;
   textChunkBufferSize: number;
+  // Available slash commands and skills (captured from init message)
+  slashCommands: string[];
+  skills: string[];
 }
 
 /**
@@ -184,6 +194,7 @@ export class SDKMessageProcessor {
       existingSdkSessionId: options.existingSdkSessionId,
       capturedAgentSessionId: undefined,
       messageCount: 0,
+      assistantMessageCount: 0,
       lastActivityTime: Date.now(),
       lastAssistantMessageTime: Date.now(),
       enableTokenStreaming: options.enableTokenStreaming ?? true,
@@ -192,6 +203,8 @@ export class SDKMessageProcessor {
       contentBlockStack: [],
       textChunkBuffer: '',
       textChunkBufferSize: 0,
+      slashCommands: [],
+      skills: [],
     };
   }
 
@@ -288,6 +301,7 @@ export class SDKMessageProcessor {
    */
   private handleAssistant(msg: SDKAssistantMessage): ProcessedEvent[] {
     this.state.lastAssistantMessageTime = Date.now();
+    this.state.assistantMessageCount++;
 
     const contentBlocks = this.processContentBlocks(msg.message?.content);
     const toolUses = this.extractToolUses(contentBlocks);
@@ -545,7 +559,42 @@ export class SDKMessageProcessor {
       console.log(`   Model usage (with contextWindow):`, JSON.stringify(msg.modelUsage, null, 2));
     }
 
-    return [
+    const events: ProcessedEvent[] = [];
+
+    // The SDK puts final output text in result.result for both normal prompts and local commands.
+    // For local commands (e.g. /usage, /cost), this is the ONLY output (no assistant messages).
+    // For normal prompts, assistant messages are already streamed separately.
+    // We emit result text as a system message when no assistant messages were produced.
+    if (
+      msg.subtype === 'success' &&
+      'result' in msg &&
+      msg.result &&
+      typeof msg.result === 'string' &&
+      msg.result.trim().length > 0
+    ) {
+      const hasAssistantMessages = this.state.assistantMessageCount > 0;
+      console.log(
+        `📋 SDK result text (${msg.result.length} chars, hasAssistantMessages=${hasAssistantMessages})`
+      );
+      if (!hasAssistantMessages) {
+        events.push({
+          type: 'complete',
+          role: MessageRole.ASSISTANT,
+          content: [
+            {
+              type: 'text',
+              text: msg.result,
+            },
+          ],
+          toolUses: undefined,
+          parent_tool_use_id: null,
+          agentSessionId: this.state.capturedAgentSessionId,
+          resolvedModel: this.state.resolvedModel,
+        });
+      }
+    }
+
+    events.push(
       {
         type: 'result',
         raw_sdk_message: msg, // Pass the entire SDK message unchanged
@@ -554,8 +603,10 @@ export class SDKMessageProcessor {
       {
         type: 'end',
         reason: 'result',
-      },
-    ];
+      }
+    );
+
+    return events;
   }
 
   /**
@@ -608,20 +659,42 @@ export class SDKMessageProcessor {
     }
 
     if ('subtype' in msg && msg.subtype === 'init') {
+      const initMsg = msg as SDKSystemMessage;
       console.debug(`ℹ️  SDK system init:`, {
-        model: msg.model,
-        permissionMode: msg.permissionMode,
-        cwd: msg.cwd,
-        tools: msg.tools?.length,
-        mcp_servers: msg.mcp_servers?.length,
+        model: initMsg.model,
+        permissionMode: initMsg.permissionMode,
+        cwd: initMsg.cwd,
+        tools: initMsg.tools?.length,
+        mcp_servers: initMsg.mcp_servers?.length,
+        slash_commands: initMsg.slash_commands?.length,
+        skills: initMsg.skills?.length,
       });
 
+      const events: ProcessedEvent[] = [];
+
       // Capture model from init message
-      if (msg.model) {
-        this.state.resolvedModel = msg.model;
+      if (initMsg.model) {
+        this.state.resolvedModel = initMsg.model;
       }
 
-      return [];
+      // Capture available slash commands and skills for autocomplete
+      if (initMsg.slash_commands || initMsg.skills) {
+        this.state.slashCommands = initMsg.slash_commands || [];
+        this.state.skills = initMsg.skills || [];
+        console.log(
+          `📋 Available commands: ${this.state.slashCommands.length} slash commands, ${this.state.skills.length} skills`
+        );
+
+        // Emit event so claude-tool can persist to session for UI autocomplete
+        events.push({
+          type: 'slash_commands_discovered',
+          slashCommands: this.state.slashCommands,
+          skills: this.state.skills,
+          agentSessionId: this.state.capturedAgentSessionId,
+        });
+      }
+
+      return events;
     }
 
     console.debug(`ℹ️  SDK system message:`, msg);
