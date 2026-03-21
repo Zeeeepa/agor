@@ -141,6 +141,16 @@ export function setupMCPRoutes(app: Application, db: Database): void {
                     type: 'string',
                     description: 'Filter sessions by worktree ID',
                   },
+                  includeArchived: {
+                    type: 'boolean',
+                    description:
+                      'Include archived sessions in results (default: false). By default, archived sessions are excluded.',
+                  },
+                  archived: {
+                    type: 'boolean',
+                    description:
+                      'Filter to show ONLY archived sessions. When true, returns only archived sessions. Overrides includeArchived.',
+                  },
                 },
               },
             },
@@ -294,7 +304,7 @@ export function setupMCPRoutes(app: Application, db: Database): void {
             {
               name: 'agor_sessions_update',
               description:
-                'Update session metadata (title, description, status). Useful for agents to self-document their work.',
+                'Update session metadata (title, description, status, archived). Useful for agents to self-document their work.',
               inputSchema: {
                 type: 'object',
                 properties: {
@@ -314,6 +324,51 @@ export function setupMCPRoutes(app: Application, db: Database): void {
                     type: 'string',
                     enum: ['idle', 'running', 'completed', 'failed'],
                     description: 'New session status (optional)',
+                  },
+                  archived: {
+                    type: 'boolean',
+                    description:
+                      'Set archive state. true to archive, false to unarchive (optional)',
+                  },
+                },
+                required: ['sessionId'],
+              },
+            },
+            {
+              name: 'agor_sessions_archive',
+              description:
+                'Archive a session (soft delete). Archived sessions are hidden from listings by default but can be restored. By default, all child sessions (forks and subsessions) are also archived. Set includeChildren to false to archive only the target session.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  sessionId: {
+                    type: 'string',
+                    description: 'Session ID to archive (UUIDv7 or short ID)',
+                  },
+                  includeChildren: {
+                    type: 'boolean',
+                    description:
+                      'Also archive all child sessions (forks and subsessions). Default: true.',
+                  },
+                },
+                required: ['sessionId'],
+              },
+            },
+            {
+              name: 'agor_sessions_unarchive',
+              description:
+                'Restore a previously archived session. By default, all child sessions are also unarchived. Set includeChildren to false to unarchive only the target session.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  sessionId: {
+                    type: 'string',
+                    description: 'Session ID to unarchive (UUIDv7 or short ID)',
+                  },
+                  includeChildren: {
+                    type: 'boolean',
+                    description:
+                      'Also unarchive all child sessions (forks and subsessions). Default: true.',
                   },
                 },
                 required: ['sessionId'],
@@ -428,6 +483,16 @@ export function setupMCPRoutes(app: Application, db: Database): void {
                   limit: {
                     type: 'number',
                     description: 'Maximum number of results (default: 50)',
+                  },
+                  includeArchived: {
+                    type: 'boolean',
+                    description:
+                      'Include archived worktrees in results (default: false). By default, archived worktrees are excluded.',
+                  },
+                  archived: {
+                    type: 'boolean',
+                    description:
+                      'Filter to show ONLY archived worktrees. When true, returns only archived worktrees. Overrides includeArchived.',
                   },
                 },
               },
@@ -558,6 +623,68 @@ export function setupMCPRoutes(app: Application, db: Database): void {
                   },
                 },
                 required: ['worktreeId', 'zoneId'],
+              },
+            },
+
+            {
+              name: 'agor_worktrees_archive',
+              description:
+                'Archive a worktree (soft delete). Stops the environment if running, optionally cleans or deletes the filesystem, archives the worktree metadata and all its sessions, and removes it from the board. Use agor_worktrees_unarchive to restore.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  worktreeId: {
+                    type: 'string',
+                    description: 'Worktree ID to archive (UUIDv7 or short ID)',
+                  },
+                  filesystemAction: {
+                    type: 'string',
+                    enum: ['preserved', 'cleaned', 'deleted'],
+                    description:
+                      'What to do with the worktree files on disk. "preserved" leaves files untouched, "cleaned" runs git clean -fdx (removes node_modules, builds, untracked files), "deleted" removes the entire worktree directory. Default: "cleaned".',
+                  },
+                },
+                required: ['worktreeId'],
+              },
+            },
+            {
+              name: 'agor_worktrees_unarchive',
+              description:
+                'Restore a previously archived worktree. Optionally place it back on a board. Also unarchives all sessions that were archived as part of the worktree archival.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  worktreeId: {
+                    type: 'string',
+                    description: 'Worktree ID to unarchive (UUIDv7 or short ID)',
+                  },
+                  boardId: {
+                    type: 'string',
+                    description: 'Board ID to restore the worktree onto (optional)',
+                  },
+                },
+                required: ['worktreeId'],
+              },
+            },
+            {
+              name: 'agor_worktrees_delete',
+              description:
+                'Permanently delete a worktree and all its sessions, messages, and tasks. This action cannot be undone. Stops the environment if running and optionally removes files from disk.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  worktreeId: {
+                    type: 'string',
+                    description: 'Worktree ID to delete (UUIDv7 or short ID)',
+                  },
+                  filesystemAction: {
+                    type: 'string',
+                    enum: ['preserved', 'deleted'],
+                    description:
+                      'What to do with the worktree files on disk. "preserved" leaves files untouched, "deleted" removes the entire worktree directory. Default: "deleted".',
+                  },
+                },
+                required: ['worktreeId'],
               },
             },
 
@@ -1203,6 +1330,16 @@ export function setupMCPRoutes(app: Application, db: Database): void {
           if (args?.boardId) query.board_id = args.boardId;
           if (args?.worktreeId) query.worktree_id = args.worktreeId;
 
+          // Archive filtering: exclude archived by default
+          if (args?.archived === true) {
+            // Show ONLY archived sessions
+            query.archived = true;
+          } else if (!args?.includeArchived) {
+            // Default: exclude archived sessions
+            query.archived = false;
+          }
+          // If includeArchived is true and archived is not set, don't filter by archived
+
           const sessions = await app.service('sessions').find({ query });
           mcpResponse = {
             content: [
@@ -1690,14 +1827,14 @@ export function setupMCPRoutes(app: Application, db: Database): void {
           }
 
           // Validate at least one field is provided
-          if (!args.title && !args.description && !args.status) {
+          if (!args.title && !args.description && !args.status && args.archived === undefined) {
             return res.status(400).json({
               jsonrpc: '2.0',
               id: mcpRequest.id,
               error: {
                 code: -32602,
                 message:
-                  'Invalid params: at least one field (title, description, status) must be provided',
+                  'Invalid params: at least one field (title, description, status, archived) must be provided',
               },
             });
           }
@@ -1709,6 +1846,10 @@ export function setupMCPRoutes(app: Application, db: Database): void {
           if (args.title !== undefined) updates.title = args.title;
           if (args.description !== undefined) updates.description = args.description;
           if (args.status !== undefined) updates.status = args.status;
+          if (args.archived !== undefined) {
+            updates.archived = args.archived;
+            updates.archived_reason = args.archived ? 'manual' : undefined;
+          }
 
           // Update session
           const session = await app
@@ -1724,6 +1865,152 @@ export function setupMCPRoutes(app: Application, db: Database): void {
                   {
                     session,
                     note: 'Session updated successfully.',
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        } else if (name === 'agor_sessions_archive') {
+          // Archive a session (soft delete)
+          if (!args?.sessionId) {
+            return res.status(400).json({
+              jsonrpc: '2.0',
+              id: mcpRequest.id,
+              error: {
+                code: -32602,
+                message: 'Invalid params: sessionId is required',
+              },
+            });
+          }
+
+          console.log(
+            `📦 MCP archiving session ${args.sessionId.substring(0, 8)}${args.includeChildren !== false ? ' (with children)' : ''}`
+          );
+
+          const includeChildren = args.includeChildren !== false;
+          const sessionsService = app.service('sessions') as unknown as SessionsServiceImpl;
+          let archivedCount = 0;
+
+          // Archive the target session (idempotent - succeeds even if already archived)
+          await app
+            .service('sessions')
+            .patch(
+              args.sessionId,
+              { archived: true, archived_reason: 'manual' },
+              baseServiceParams
+            );
+          archivedCount++;
+
+          // Archive children by default
+          if (includeChildren) {
+            // Recursively collect all descendant session IDs
+            const collectDescendantIds = async (parentId: string): Promise<string[]> => {
+              const gen = await sessionsService.getGenealogy(parentId, baseServiceParams);
+              const ids: string[] = [];
+              for (const child of gen.children) {
+                ids.push(child.session_id);
+                const nested = await collectDescendantIds(child.session_id);
+                ids.push(...nested);
+              }
+              return ids;
+            };
+
+            const descendantIds = await collectDescendantIds(args.sessionId);
+            for (const childId of descendantIds) {
+              await app
+                .service('sessions')
+                .patch(childId, { archived: true, archived_reason: 'manual' }, baseServiceParams);
+              archivedCount++;
+            }
+          }
+
+          console.log(`✅ Archived ${archivedCount} session(s)`);
+
+          mcpResponse = {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    success: true,
+                    archivedCount,
+                    message: `Archived ${archivedCount} session(s).`,
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        } else if (name === 'agor_sessions_unarchive') {
+          // Unarchive (restore) a session
+          if (!args?.sessionId) {
+            return res.status(400).json({
+              jsonrpc: '2.0',
+              id: mcpRequest.id,
+              error: {
+                code: -32602,
+                message: 'Invalid params: sessionId is required',
+              },
+            });
+          }
+
+          console.log(
+            `📦 MCP unarchiving session ${args.sessionId.substring(0, 8)}${args.includeChildren !== false ? ' (with children)' : ''}`
+          );
+
+          const includeChildren = args.includeChildren !== false;
+          const unarchivedSessionsService = app.service(
+            'sessions'
+          ) as unknown as SessionsServiceImpl;
+          let unarchivedCount = 0;
+
+          // Unarchive the target session (idempotent)
+          await app
+            .service('sessions')
+            .patch(
+              args.sessionId,
+              { archived: false, archived_reason: undefined },
+              baseServiceParams
+            );
+          unarchivedCount++;
+
+          // Unarchive children by default
+          if (includeChildren) {
+            // Recursively collect all descendant session IDs
+            const collectDescendantIds = async (parentId: string): Promise<string[]> => {
+              const gen = await unarchivedSessionsService.getGenealogy(parentId, baseServiceParams);
+              const ids: string[] = [];
+              for (const child of gen.children) {
+                ids.push(child.session_id);
+                const nested = await collectDescendantIds(child.session_id);
+                ids.push(...nested);
+              }
+              return ids;
+            };
+
+            const descendantIds = await collectDescendantIds(args.sessionId);
+            for (const childId of descendantIds) {
+              await app
+                .service('sessions')
+                .patch(childId, { archived: false, archived_reason: undefined }, baseServiceParams);
+              unarchivedCount++;
+            }
+          }
+
+          console.log(`✅ Unarchived ${unarchivedCount} session(s)`);
+
+          mcpResponse = {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    success: true,
+                    unarchivedCount,
+                    message: `Unarchived ${unarchivedCount} session(s).`,
                   },
                   null,
                   2
@@ -1895,6 +2182,13 @@ export function setupMCPRoutes(app: Application, db: Database): void {
           const query: Record<string, unknown> = {};
           if (args?.repoId) query.repo_id = args.repoId;
           if (args?.limit) query.$limit = args.limit;
+
+          // Archive filtering: exclude archived by default
+          if (args?.archived === true) {
+            query.archived = true;
+          } else if (!args?.includeArchived) {
+            query.archived = false;
+          }
 
           const worktrees = await app.service('worktrees').find({ query });
           mcpResponse = {
@@ -2667,6 +2961,120 @@ export function setupMCPRoutes(app: Application, db: Database): void {
               },
             });
           }
+        } else if (name === 'agor_worktrees_archive') {
+          // Archive a worktree (soft delete)
+          const worktreeId = coerceString(args?.worktreeId);
+          if (!worktreeId) {
+            return res.status(400).json({
+              jsonrpc: '2.0',
+              id: mcpRequest.id,
+              error: { code: -32602, message: 'Invalid params: worktreeId is required' },
+            });
+          }
+
+          const filesystemAction =
+            (args?.filesystemAction as 'preserved' | 'cleaned' | 'deleted') || 'cleaned';
+          console.log(
+            `📦 MCP archiving worktree ${worktreeId.substring(0, 8)} (filesystem: ${filesystemAction})`
+          );
+
+          const worktreesService = app.service(
+            'worktrees'
+          ) as unknown as import('../declarations').WorktreesServiceImpl;
+          const result = await worktreesService.archiveOrDelete(
+            worktreeId as import('@agor/core/types').WorktreeID,
+            { metadataAction: 'archive', filesystemAction },
+            baseServiceParams
+          );
+
+          mcpResponse = {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  { success: true, worktree: result, message: 'Worktree archived successfully.' },
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        } else if (name === 'agor_worktrees_unarchive') {
+          // Unarchive (restore) a worktree
+          const worktreeId = coerceString(args?.worktreeId);
+          if (!worktreeId) {
+            return res.status(400).json({
+              jsonrpc: '2.0',
+              id: mcpRequest.id,
+              error: { code: -32602, message: 'Invalid params: worktreeId is required' },
+            });
+          }
+
+          const boardId = coerceString(args?.boardId);
+          console.log(`📦 MCP unarchiving worktree ${worktreeId.substring(0, 8)}`);
+
+          const worktreesService = app.service(
+            'worktrees'
+          ) as unknown as import('../declarations').WorktreesServiceImpl;
+          const result = await worktreesService.unarchive(
+            worktreeId as import('@agor/core/types').WorktreeID,
+            boardId ? { boardId: boardId as import('@agor/core/types').BoardID } : undefined,
+            baseServiceParams
+          );
+
+          mcpResponse = {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  { success: true, worktree: result, message: 'Worktree unarchived successfully.' },
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        } else if (name === 'agor_worktrees_delete') {
+          // Permanently delete a worktree
+          const worktreeId = coerceString(args?.worktreeId);
+          if (!worktreeId) {
+            return res.status(400).json({
+              jsonrpc: '2.0',
+              id: mcpRequest.id,
+              error: { code: -32602, message: 'Invalid params: worktreeId is required' },
+            });
+          }
+
+          const filesystemAction = (args?.filesystemAction as 'preserved' | 'deleted') || 'deleted';
+          console.log(
+            `🗑️  MCP deleting worktree ${worktreeId.substring(0, 8)} (filesystem: ${filesystemAction})`
+          );
+
+          const worktreesService = app.service(
+            'worktrees'
+          ) as unknown as import('../declarations').WorktreesServiceImpl;
+          await worktreesService.archiveOrDelete(
+            worktreeId as import('@agor/core/types').WorktreeID,
+            { metadataAction: 'delete', filesystemAction },
+            baseServiceParams
+          );
+
+          mcpResponse = {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    success: true,
+                    worktree_id: worktreeId,
+                    message: 'Worktree permanently deleted.',
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
 
           // Environment tools
         } else if (name === 'agor_environment_start') {
