@@ -310,26 +310,41 @@ async function exchangeCodeForToken(
     grant_type: 'authorization_code',
     code,
     redirect_uri: redirectUri,
-    client_id: clientId,
     code_verifier: codeVerifier,
   };
 
-  // Add client_secret if provided (confidential client)
+  // Build headers — use HTTP Basic auth when client_secret is available (RFC 6749 §2.3.1),
+  // fall back to body params for public clients or providers that don't support Basic auth.
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+  };
+
   if (clientSecret) {
-    body.client_secret = clientSecret;
+    // Slack and other providers recommend HTTP Basic auth for credentials
+    headers.Authorization = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
+  } else {
+    // Public client — send client_id in body
+    body.client_id = clientId;
   }
+
+  console.log('[MCP OAuth] Token exchange request:', {
+    endpoint: tokenEndpoint,
+    hasBasicAuth: !!headers.Authorization,
+    bodyKeys: Object.keys(body),
+  });
 
   const response = await fetch(tokenEndpoint, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
+    headers,
     body: new URLSearchParams(body).toString(),
     signal: AbortSignal.timeout(15_000),
   });
 
+  console.log('[MCP OAuth] Token exchange response status:', response.status);
+
   if (!response.ok) {
     const errorText = await response.text();
+    console.error('[MCP OAuth] Token exchange HTTP error:', response.status, errorText);
     throw new Error(`Token exchange failed (${response.status}): ${errorText}`);
   }
 
@@ -344,7 +359,10 @@ async function exchangeCodeForToken(
 
   // Some providers (e.g. Slack) return HTTP 200 with {"ok": false, "error": "..."} on failure
   if (json.ok === false && json.error) {
-    throw new Error(`Token exchange failed: ${json.error}`);
+    console.error('[MCP OAuth] Token exchange error response:', JSON.stringify(json));
+    throw new Error(
+      `Token exchange failed: ${json.error}${json.error_description ? ` - ${json.error_description}` : ''}`
+    );
   }
 
   // Standard OAuth 2.0 response has access_token at top level.
@@ -705,7 +723,7 @@ export async function startMCPOAuthFlow(
   wwwAuthenticateHeader: string,
   clientId?: string,
   redirectUri?: string,
-  options?: { authorizationUrlOverride?: string; tokenUrlOverride?: string }
+  options?: { authorizationUrlOverride?: string; tokenUrlOverride?: string; clientSecret?: string }
 ): Promise<OAuthFlowContext> {
   console.log('[MCP OAuth] Starting two-phase OAuth 2.1 flow');
 
@@ -747,7 +765,7 @@ export async function startMCPOAuthFlow(
 
   // Step 6: Get or register client_id
   let actualClientId = clientId;
-  let clientSecret: string | undefined;
+  let clientSecret: string | undefined = options?.clientSecret;
 
   if (!actualClientId) {
     // Check if server supports Dynamic Client Registration (RFC 7591)
@@ -841,6 +859,10 @@ export async function completeMCPOAuthFlow(
   state: string
 ): Promise<string> {
   console.log('[MCP OAuth] Completing OAuth flow with authorization code');
+  console.log('[MCP OAuth] Token endpoint:', context.tokenEndpoint);
+  console.log('[MCP OAuth] Redirect URI:', context.redirectUri);
+  console.log('[MCP OAuth] Client ID:', context.clientId);
+  console.log('[MCP OAuth] Has client secret:', !!context.clientSecret);
 
   // Verify state to prevent CSRF
   if (state !== context.state) {

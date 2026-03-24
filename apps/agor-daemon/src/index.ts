@@ -1234,10 +1234,16 @@ async function main() {
         return;
       }
 
-      console.log('[OAuth Callback] Received callback, state:', state);
+      console.log('[OAuth Callback] Received callback, state:', state, 'code length:', code.length);
 
       // Find the pending flow
       const pendingFlow = pendingOAuthFlows.get(state);
+      console.log(
+        '[OAuth Callback] Pending flows count:',
+        pendingOAuthFlows.size,
+        'found:',
+        !!pendingFlow
+      );
       if (!pendingFlow) {
         res
           .status(400)
@@ -1817,6 +1823,7 @@ async function main() {
         let oauthMode: 'per_user' | 'shared' | undefined;
         let authorizationUrlOverride: string | undefined;
         let tokenUrlOverride: string | undefined;
+        let clientSecretOverride: string | undefined;
         if (data.mcp_server_id) {
           const mcpServerRepo = new MCPServerRepository(db);
           const server = await mcpServerRepo.findById(data.mcp_server_id);
@@ -1824,6 +1831,7 @@ async function main() {
             oauthMode = server.auth.oauth_mode || 'per_user';
             authorizationUrlOverride = server.auth.oauth_authorization_url;
             tokenUrlOverride = server.auth.oauth_token_url;
+            clientSecretOverride = server.auth.oauth_client_secret;
             console.log('[OAuth Start] OAuth mode from server config:', oauthMode);
             if (authorizationUrlOverride) {
               console.log('[OAuth Start] Authorization URL override:', authorizationUrlOverride);
@@ -1859,6 +1867,7 @@ async function main() {
         const context = await startMCPOAuthFlow(wwwAuthenticate, data.client_id, redirectUri, {
           authorizationUrlOverride,
           tokenUrlOverride,
+          clientSecret: clientSecretOverride,
         });
 
         // Capture initiating socket ID for scoped notifications
