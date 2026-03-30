@@ -10,7 +10,7 @@ import type {
 } from '@agor/core/types';
 import { getAssistantConfig, isAssistant } from '@agor/core/types';
 import { Badge, Modal, Tabs, theme } from 'antd';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { mapToArray } from '@/utils/mapHelpers';
 import { AssistantTab } from './tabs/AssistantTab';
 import { EnvironmentTab } from './tabs/EnvironmentTab';
@@ -18,6 +18,14 @@ import { FilesTab } from './tabs/FilesTab';
 import { GeneralTab, type WorktreeUpdate } from './tabs/GeneralTab';
 import { ScheduleTab } from './tabs/ScheduleTab';
 import { SessionsTab } from './tabs/SessionsTab';
+
+export type WorktreeModalTab =
+  | 'general'
+  | 'assistant'
+  | 'sessions'
+  | 'environment'
+  | 'files'
+  | 'schedule';
 
 export interface WorktreeModalProps {
   open: boolean;
@@ -41,6 +49,7 @@ export interface WorktreeModalProps {
   ) => void;
   onOpenSettings?: () => void; // Navigate to Settings → Repositories
   onSessionClick?: (sessionId: string) => void;
+  defaultTab?: WorktreeModalTab; // Open modal to a specific tab
 }
 
 export const WorktreeModal: React.FC<WorktreeModalProps> = ({
@@ -59,9 +68,17 @@ export const WorktreeModal: React.FC<WorktreeModalProps> = ({
   onArchiveOrDelete,
   onOpenSettings,
   onSessionClick,
+  defaultTab,
 }) => {
   const { token } = theme.useToken();
   const [activeTab, setActiveTab] = useState('general');
+
+  // Sync active tab when modal opens — use defaultTab if specified, otherwise reset to general
+  useEffect(() => {
+    if (open) {
+      setActiveTab(defaultTab || 'general');
+    }
+  }, [open, defaultTab]);
 
   const isAnAssistant = worktree ? isAssistant(worktree) : false;
   const assistantConfig = useMemo(
