@@ -243,15 +243,48 @@ export function scopeWorktreeQuery(worktreeRepo: WorktreeRepository) {
     }
 
     // Use optimized repository method (single SQL query with JOIN)
-    const accessibleWorktrees = await worktreeRepo.findAccessibleWorktrees(userId);
+    const query = context.params.query ?? {};
+    const accessibleWorktrees = await worktreeRepo.findAccessibleWorktrees(userId, {
+      archived: query.archived,
+    });
+
+    // Apply client-side filtering for non-special query params (repo_id, name, etc.)
+    let filtered = accessibleWorktrees;
+    for (const [key, value] of Object.entries(query)) {
+      if (key.startsWith('$') || key === 'archived') continue; // Skip operators and already-applied filters
+      // biome-ignore lint/suspicious/noExplicitAny: Dynamic property access for generic query filtering
+      filtered = filtered.filter((item: any) => item[key] === value);
+    }
+
+    // Apply sorting if specified (matches scopeSessionQuery behavior)
+    const sort = query.$sort;
+    if (sort) {
+      const sortField = Object.keys(sort)[0] as keyof Worktree;
+      const sortOrder = sort[sortField] as 1 | -1;
+      filtered = [...filtered].sort((a, b) => {
+        const aVal = a[sortField];
+        const bVal = b[sortField];
+        if (aVal == null && bVal == null) return 0;
+        if (aVal == null) return 1;
+        if (bVal == null) return -1;
+        if (aVal < bVal) return sortOrder === -1 ? 1 : -1;
+        if (aVal > bVal) return sortOrder === -1 ? -1 : 1;
+        return 0;
+      });
+    }
+
+    // Apply pagination
+    const limit = query.$limit ?? filtered.length;
+    const skip = query.$skip ?? 0;
+    const paginated = filtered.slice(skip, skip + limit);
 
     // Set result directly to bypass default query
     // This prevents the N+1 problem from the old filterWorktreesByPermission approach
     context.result = {
-      total: accessibleWorktrees.length,
-      limit: context.params.query?.$limit ?? accessibleWorktrees.length,
-      skip: context.params.query?.$skip ?? 0,
-      data: accessibleWorktrees,
+      total: filtered.length,
+      limit,
+      skip,
+      data: paginated,
     };
 
     return context;
