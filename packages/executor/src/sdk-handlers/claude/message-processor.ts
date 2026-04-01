@@ -123,7 +123,7 @@ export type ProcessedEvent =
     }
   | {
       type: 'rate_limit';
-      status: string;
+      status: 'allowed' | 'allowed_warning' | 'rejected';
       resetsAt?: number;
       rateLimitType?: string;
       overageStatus?: string;
@@ -743,7 +743,7 @@ export class SDKMessageProcessor {
    * Handle rate_limit_event messages from the SDK
    *
    * SDK statuses (from SDKRateLimitInfo):
-   * - 'allowed': Normal, fires on every API call — only surface if overage is concerning
+   * - 'allowed': Normal, fires on every API call — never surfaced (too noisy)
    * - 'allowed_warning': Approaching rate limit — always surface
    * - 'rejected': Hard blocked by rate limit — always surface
    */
@@ -769,14 +769,11 @@ export class SDKMessageProcessor {
       );
     }
 
-    // Surface all events EXCEPT plain 'allowed' with no concerning overage.
-    // 'allowed' fires on every API call and would be extremely noisy.
-    // 'allowed_warning' and 'rejected' always get surfaced.
-    const shouldSurface =
-      status === 'allowed_warning' ||
-      status === 'rejected' ||
-      (status === 'allowed' &&
-        (overageStatus === 'rejected' || overageStatus === 'allowed_warning'));
+    // Surface only events where the user is actually rate-limited or approaching a limit.
+    // 'allowed' fires on every API call — never surface it, even if overageStatus is 'rejected',
+    // because that just means the org doesn't have overage enabled (a permanent, non-actionable state).
+    // 'allowed_warning' and 'rejected' always get surfaced since they indicate real throttling.
+    const shouldSurface = status === 'allowed_warning' || status === 'rejected';
 
     if (shouldSurface) {
       return [
