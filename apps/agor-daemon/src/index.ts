@@ -102,6 +102,7 @@ import type {
   Task,
   TaskID,
   User,
+  UserID,
 } from '@agor/core/types';
 import { SessionStatus, TaskStatus } from '@agor/core/types';
 import { NotFoundError } from '@agor/core/utils/errors';
@@ -1185,7 +1186,11 @@ async function main() {
 
   // Feature flag: Worktree RBAC (default: false)
   const worktreeRbacEnabled = config.execution?.worktree_rbac === true;
+  // Feature flag: Allow superadmin role (default: false, opt-in)
+  const allowSuperadmin = config.execution?.allow_superadmin === true;
+  const superadminOpts = { allowSuperadmin };
   console.log(`[RBAC] Worktree RBAC ${worktreeRbacEnabled ? 'Enabled' : 'Disabled'}`);
+  console.log(`[RBAC] Superadmin bypass ${allowSuperadmin ? 'Enabled' : 'Disabled'}`);
 
   // Register worktree-owners nested route services for RBAC owner management
   // Only register if RBAC is enabled
@@ -1198,6 +1203,7 @@ async function main() {
     setupWorktreeOwnersService(app, worktreeRepo, {
       jwtSecret,
       daemonUser: config.daemon?.unix_user,
+      allowSuperadmin,
     });
   }
 
@@ -2183,7 +2189,8 @@ async function main() {
             if (params?.provider && params.user) {
               const userId = params.user.user_id;
               const userRole = params.user.role?.toLowerCase();
-              const isAdmin = userRole === 'admin' || userRole === 'owner';
+              const isAdmin =
+                userRole === 'admin' || userRole === 'superadmin' || userRole === 'owner';
               const isOwner = server.owner_user_id === userId;
 
               if (server.scope === 'global' && !isOwner && !isAdmin) {
@@ -2215,7 +2222,8 @@ async function main() {
           if (params?.provider && params.user) {
             const userId = params.user.user_id;
             const userRole = params.user.role?.toLowerCase();
-            const isAdmin = userRole === 'admin' || userRole === 'owner';
+            const isAdmin =
+              userRole === 'admin' || userRole === 'superadmin' || userRole === 'owner';
             const isOwner = server.owner_user_id === userId;
 
             // For global servers, allow owner or admin
@@ -2758,6 +2766,42 @@ async function main() {
   const usersService = createUsersService(db);
   app.use('/users', usersService);
 
+  // Optional bootstrap: promote configured users to superadmin (promote-only, no demotion)
+  const bootstrapSuperadminUsers = config.execution?.bootstrap_superadmin_users ?? [];
+  if (bootstrapSuperadminUsers.length > 0) {
+    if (!allowSuperadmin) {
+      console.warn(
+        '[RBAC] execution.bootstrap_superadmin_users is set but allow_superadmin=false; skipping bootstrap promotions'
+      );
+    } else {
+      let promotedCount = 0;
+      for (const rawUserId of bootstrapSuperadminUsers) {
+        const userId = rawUserId?.trim();
+        if (!userId) continue;
+
+        try {
+          const user = await usersService.get(userId as UserID);
+          if (user.role === 'superadmin') {
+            continue; // Already promoted
+          }
+
+          await usersService.patch(userId as UserID, { role: 'superadmin' });
+          promotedCount++;
+          console.log(
+            `[RBAC] Bootstrap promoted user ${userId.substring(0, 8)} (${user.email}) to superadmin`
+          );
+        } catch (error) {
+          console.warn(
+            `[RBAC] Failed to bootstrap superadmin for user ${userId.substring(0, 8)}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      }
+      console.log(
+        `[RBAC] Bootstrap superadmin sync complete (${promotedCount}/${bootstrapSuperadminUsers.length} promoted)`
+      );
+    }
+  }
+
   // Configure service hooks for authentication and authorization
   app.service('messages').hooks({
     before: {
@@ -2768,7 +2812,7 @@ async function main() {
               resolveSessionContext(),
               loadSession(sessionsService),
               loadWorktreeFromSession(worktreeRepository),
-              ensureCanView(), // Require 'view' permission
+              ensureCanView(superadminOpts), // Require 'view' permission
             ]
           : []),
       ],
@@ -2780,7 +2824,7 @@ async function main() {
               loadSession(sessionsService),
               validateSessionUnixUsername(usersRepository), // Defensive check: session.unix_username must match creator's current unix_username
               loadWorktreeFromSession(worktreeRepository),
-              ensureCanPrompt(), // Require 'prompt' permission to create messages
+              ensureCanPrompt(superadminOpts), // Require 'prompt' permission to create messages
             ]
           : []),
       ],
@@ -2791,7 +2835,7 @@ async function main() {
               resolveSessionContext(),
               loadSession(sessionsService),
               loadWorktreeFromSession(worktreeRepository),
-              ensureCanPrompt(), // Require 'prompt' permission to update messages
+              ensureCanPrompt(superadminOpts), // Require 'prompt' permission to update messages
             ]
           : []),
       ],
@@ -2802,7 +2846,7 @@ async function main() {
               resolveSessionContext(),
               loadSession(sessionsService),
               loadWorktreeFromSession(worktreeRepository),
-              ensureCanPrompt(), // Require 'prompt' permission to delete messages
+              ensureCanPrompt(superadminOpts), // Require 'prompt' permission to delete messages
             ]
           : []),
       ],
@@ -2983,13 +3027,13 @@ async function main() {
       ],
       find: [
         // RBAC: Optimized SQL-based filtering (single query with JOIN, no N+1)
-        ...(worktreeRbacEnabled ? [scopeWorktreeQuery(worktreeRepository)] : []),
+        ...(worktreeRbacEnabled ? [scopeWorktreeQuery(worktreeRepository, superadminOpts)] : []),
       ],
       get: [
         ...(worktreeRbacEnabled
           ? [
               loadWorktree(worktreeRepository),
-              ensureCanView(), // Require 'view' permission to read worktree
+              ensureCanView(superadminOpts), // Require 'view' permission to read worktree
             ]
           : []),
       ],
@@ -2998,7 +3042,7 @@ async function main() {
         ...(worktreeRbacEnabled
           ? [
               loadWorktree(worktreeRepository),
-              ensureWorktreePermission('all', 'update worktrees'), // Require 'all' permission to update
+              ensureWorktreePermission('all', 'update worktrees', superadminOpts), // Require 'all' permission to update
             ]
           : []),
         // Capture previous others_fs_access for comparison in after hook
@@ -3024,7 +3068,7 @@ async function main() {
         ...(worktreeRbacEnabled
           ? [
               loadWorktree(worktreeRepository),
-              ensureWorktreePermission('all', 'delete worktrees'), // Require 'all' permission to delete
+              ensureWorktreePermission('all', 'delete worktrees', superadminOpts), // Require 'all' permission to delete
             ]
           : []),
       ],
@@ -3432,35 +3476,64 @@ async function main() {
             ensureMinimumRole(params, 'admin', 'create users');
           }
 
+          // Only superadmins can create superadmin users
+          // Guard both 'superadmin' and legacy 'owner' to prevent bypass
+          // biome-ignore lint/suspicious/noExplicitAny: Feathers context data
+          const data = context.data as any;
+          if (data?.role === 'superadmin' || data?.role === 'owner') {
+            const callerRole = params.user?.role;
+            if (callerRole !== 'superadmin' && callerRole !== 'owner') {
+              throw new Forbidden('Only superadmins can create superadmin users');
+            }
+          }
+
           return context;
         },
       ],
       patch: [
-        (context) => {
+        async (context) => {
           const params = context.params as AuthenticatedParams;
           const userId = context.id as string;
+          const callerRole = params.user?.role;
+          const callerIsAdmin =
+            callerRole === 'admin' || callerRole === 'superadmin' || callerRole === 'owner';
 
           // Field-level restrictions: only admins can modify unix_username, role, and must_change_password
           if (!Array.isArray(context.data)) {
             if (context.data?.unix_username !== undefined) {
-              if (!params.user || params.user.role !== 'admin') {
+              if (!callerIsAdmin) {
                 throw new Forbidden('Only admins can modify unix_username');
               }
             }
             if (context.data?.role !== undefined) {
-              if (!params.user || params.user.role !== 'admin') {
+              if (!callerIsAdmin) {
                 throw new Forbidden('Only admins can modify user roles');
+              }
+              // Only superadmins can assign the superadmin role
+              // Guard both 'superadmin' and legacy 'owner' to prevent bypass
+              if (
+                (context.data.role === 'superadmin' || context.data.role === 'owner') &&
+                callerRole !== 'superadmin' &&
+                callerRole !== 'owner'
+              ) {
+                // Bootstrap: allow first superadmin promotion if none exist yet
+                // Note: usersService.find() doesn't filter by role, so filter in JS
+                const allUsers = (await usersService.find({})) as Paginated<User>;
+                const hasSuperadmin = allUsers.data.some((u) => u.role === 'superadmin');
+                if (hasSuperadmin) {
+                  throw new Forbidden('Only superadmins can assign the superadmin role');
+                }
               }
             }
             if (context.data?.must_change_password !== undefined) {
-              if (!params.user || params.user.role !== 'admin') {
+              if (!callerIsAdmin) {
                 throw new Forbidden('Only admins can force password changes');
               }
             }
           }
 
           // General authorization: admins can patch any user
-          if (params.user && params.user.role === 'admin') {
+          if (callerIsAdmin) {
             return context;
           }
 
@@ -3602,14 +3675,14 @@ async function main() {
       ],
       find: [
         // RBAC: Optimized SQL-based filtering (single query with JOIN on worktrees, no N+1)
-        ...(worktreeRbacEnabled ? [scopeSessionQuery(sessionsRepository)] : []),
+        ...(worktreeRbacEnabled ? [scopeSessionQuery(sessionsRepository, superadminOpts)] : []),
       ],
       get: [
         ...(worktreeRbacEnabled
           ? [
               // Load session's worktree and check permissions
               loadSessionWorktree(sessionsService, worktreeRepository),
-              ensureCanView(), // Require 'view' permission on worktree
+              ensureCanView(superadminOpts), // Require 'view' permission on worktree
             ]
           : []),
       ],
@@ -3647,7 +3720,7 @@ async function main() {
                 }
                 return context;
               },
-              ensureCanCreateSession(), // Require 'all' permission to create sessions
+              ensureCanCreateSession(superadminOpts), // Require 'all' permission to create sessions
             ]
           : []),
         async (context) => {
@@ -3745,7 +3818,7 @@ async function main() {
               resolveSessionContext(),
               loadSession(sessionsService),
               loadWorktreeFromSession(worktreeRepository),
-              ensureWorktreePermission('all', 'update sessions'), // Require 'all' permission
+              ensureWorktreePermission('all', 'update sessions', superadminOpts), // Require 'all' permission
             ]
           : []),
         // Validate user has prompt permission on callback target session's worktree
@@ -3771,7 +3844,7 @@ async function main() {
               resolveSessionContext(),
               loadSession(sessionsService),
               loadWorktreeFromSession(worktreeRepository),
-              ensureWorktreePermission('all', 'delete sessions'), // Require 'all' permission
+              ensureWorktreePermission('all', 'delete sessions', superadminOpts), // Require 'all' permission
             ]
           : []),
       ],
@@ -3988,7 +4061,7 @@ async function main() {
               resolveSessionContext(),
               loadSession(sessionsService),
               loadWorktreeFromSession(worktreeRepository),
-              ensureCanView(), // Require 'view' permission
+              ensureCanView(superadminOpts), // Require 'view' permission
             ]
           : []),
       ],
@@ -4000,7 +4073,7 @@ async function main() {
               loadSession(sessionsService),
               validateSessionUnixUsername(usersRepository), // Defensive check: session.unix_username must match creator's current unix_username
               loadWorktreeFromSession(worktreeRepository),
-              ensureCanPrompt(), // Require 'prompt' permission to create tasks
+              ensureCanPrompt(superadminOpts), // Require 'prompt' permission to create tasks
             ]
           : []),
         async (context) => {
@@ -4032,7 +4105,7 @@ async function main() {
               resolveSessionContext(),
               loadSession(sessionsService),
               loadWorktreeFromSession(worktreeRepository),
-              ensureCanPrompt(), // Require 'prompt' permission to update tasks
+              ensureCanPrompt(superadminOpts), // Require 'prompt' permission to update tasks
             ]
           : []),
       ],
@@ -6230,7 +6303,7 @@ async function main() {
         },
         // Always enforce ownership check (even when RBAC disabled)
         worktreeRbacEnabled
-          ? ensureWorktreePermission('all', 'archive or delete worktrees')
+          ? ensureWorktreePermission('all', 'archive or delete worktrees', superadminOpts)
           : (context: HookContext) => {
               // When RBAC disabled, still require worktree ownership OR admin role
               // biome-ignore lint/suspicious/noExplicitAny: FeathersJS params type
@@ -6238,7 +6311,12 @@ async function main() {
               // biome-ignore lint/suspicious/noExplicitAny: FeathersJS params type
               const userRole = (context.params as any).user?.role;
 
-              if (!isOwner && userRole !== 'admin' && userRole !== 'owner') {
+              if (
+                !isOwner &&
+                userRole !== 'admin' &&
+                userRole !== 'superadmin' &&
+                userRole !== 'owner'
+              ) {
                 throw new Forbidden(
                   'You must be the worktree owner or a global admin to archive/delete worktrees'
                 );
@@ -6295,7 +6373,7 @@ async function main() {
         },
         // Always enforce ownership check (even when RBAC disabled)
         worktreeRbacEnabled
-          ? ensureWorktreePermission('all', 'unarchive worktrees')
+          ? ensureWorktreePermission('all', 'unarchive worktrees', superadminOpts)
           : (context: HookContext) => {
               // When RBAC disabled, still require worktree ownership OR admin role
               // biome-ignore lint/suspicious/noExplicitAny: FeathersJS params type
@@ -6303,7 +6381,12 @@ async function main() {
               // biome-ignore lint/suspicious/noExplicitAny: FeathersJS params type
               const userRole = (context.params as any).user?.role;
 
-              if (!isOwner && userRole !== 'admin' && userRole !== 'owner') {
+              if (
+                !isOwner &&
+                userRole !== 'admin' &&
+                userRole !== 'superadmin' &&
+                userRole !== 'owner'
+              ) {
                 throw new Forbidden(
                   'You must be the worktree owner or a global admin to unarchive worktrees'
                 );

@@ -207,6 +207,18 @@ export interface AgorExecutionSettings {
   /** Enable worktree RBAC and ownership system (default: false). When enabled, enforces permission checks and Unix group isolation. */
   worktree_rbac?: boolean;
 
+  /** Allow superadmin role (default: false). When true, superadmin role gets worktree RBAC bypass. Opt-in for self-hosted deployments. */
+  allow_superadmin?: boolean;
+
+  /**
+   * User IDs to promote to superadmin at daemon startup (promote-only, no demotion).
+   *
+   * - Applied only when allow_superadmin is true
+   * - Intended for bootstrap/recovery in self-hosted deployments
+   * - Uses stable user IDs (UUIDv7), not emails
+   */
+  bootstrap_superadmin_users?: string[];
+
   /** Session token expiration in ms (default: 86400000 = 24 hours) */
   session_token_expiration_ms?: number;
 

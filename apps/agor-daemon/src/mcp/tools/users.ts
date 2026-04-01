@@ -17,7 +17,7 @@ export function registerUserTools(server: McpServer, ctx: McpContext): void {
     async (args) => {
       const query: Record<string, unknown> = {};
       if (args.limit) query.$limit = args.limit;
-      const users = await ctx.app.service('users').find({ query });
+      const users = await ctx.app.service('users').find({ query, ...ctx.baseServiceParams });
       return textResult(users);
     }
   );
@@ -33,7 +33,7 @@ export function registerUserTools(server: McpServer, ctx: McpContext): void {
       }),
     },
     async (args) => {
-      const user = await ctx.app.service('users').get(args.userId);
+      const user = await ctx.app.service('users').get(args.userId, ctx.baseServiceParams);
       return textResult(user);
     }
   );
@@ -48,7 +48,7 @@ export function registerUserTools(server: McpServer, ctx: McpContext): void {
       inputSchema: z.object({}),
     },
     async () => {
-      const user = await ctx.app.service('users').get(ctx.userId);
+      const user = await ctx.app.service('users').get(ctx.userId, ctx.baseServiceParams);
       return textResult(user);
     }
   );
@@ -77,7 +77,9 @@ export function registerUserTools(server: McpServer, ctx: McpContext): void {
       if (args.emoji !== undefined) updateData.emoji = args.emoji;
       if (args.avatar !== undefined) updateData.avatar = args.avatar;
       if (args.preferences !== undefined) updateData.preferences = args.preferences;
-      const updatedUser = await ctx.app.service('users').patch(ctx.userId, updateData);
+      const updatedUser = await ctx.app
+        .service('users')
+        .patch(ctx.userId, updateData, ctx.baseServiceParams);
       return textResult(updatedUser);
     }
   );
@@ -95,9 +97,11 @@ export function registerUserTools(server: McpServer, ctx: McpContext): void {
         name: z.string().optional().describe('New display name (optional)'),
         password: z.string().optional().describe('New password (optional, will be hashed)'),
         role: z
-          .enum(['owner', 'admin', 'member', 'viewer'])
+          .enum(['superadmin', 'admin', 'member', 'viewer'])
           .optional()
-          .describe('New user role (optional)'),
+          .describe(
+            'New user role (optional). superadmin=full system access + worktree RBAC bypass, admin=manage resources, member=standard user, viewer=read-only'
+          ),
         unix_username: z
           .string()
           .optional()
@@ -132,7 +136,9 @@ export function registerUserTools(server: McpServer, ctx: McpContext): void {
         throw new Error('at least one field must be provided to update');
       }
 
-      const updatedUser = await ctx.app.service('users').patch(args.userId, updateData);
+      const updatedUser = await ctx.app
+        .service('users')
+        .patch(args.userId, updateData, ctx.baseServiceParams);
       return textResult(updatedUser);
     }
   );
@@ -163,10 +169,10 @@ export function registerUserTools(server: McpServer, ctx: McpContext): void {
           .optional()
           .describe('Force user to change password on first login (optional, defaults to false)'),
         role: z
-          .enum(['owner', 'admin', 'member', 'viewer'])
+          .enum(['superadmin', 'admin', 'member', 'viewer'])
           .optional()
           .describe(
-            'User role (optional, defaults to "member"). Roles: owner=full system access, admin=manage most resources, member=standard user, viewer=read-only'
+            'User role (optional, defaults to "member"). Roles: superadmin=full system access + worktree RBAC bypass, admin=manage resources, member=standard user, viewer=read-only'
           ),
       }),
     },
@@ -183,7 +189,7 @@ export function registerUserTools(server: McpServer, ctx: McpContext): void {
         createData.must_change_password = args.must_change_password;
       if (args.role !== undefined) createData.role = args.role;
 
-      const newUser = await ctx.app.service('users').create(createData);
+      const newUser = await ctx.app.service('users').create(createData, ctx.baseServiceParams);
       return textResult(newUser);
     }
   );
