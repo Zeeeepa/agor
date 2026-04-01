@@ -121,7 +121,7 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
       setEffectiveServerId(newServerId);
     }
 
-    const values = form.getFieldsValue();
+    const values = form.getFieldsValue(true);
     const requestData = extractOAuthConfigForTesting(values);
     if (!requestData) {
       showError('MCP URL is required');
@@ -261,7 +261,7 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
       return;
     }
 
-    const values = form.getFieldsValue();
+    const values = form.getFieldsValue(true);
     const currentAuthType = values.auth_type || authType;
 
     setTestingAuth(true);
@@ -876,6 +876,7 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
     <>
       <Collapse
         ghost
+        destroyOnHidden={false}
         defaultActiveKey={['basic']}
         expandIcon={({ isActive }) => <DownOutlined rotate={isActive ? 180 : 0} />}
         items={collapseItems}
@@ -985,7 +986,8 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
   const handleSaveFirstForCreate = async (): Promise<string | null> => {
     if (!client) return null;
     try {
-      const values = await form.validateFields();
+      await form.validateFields();
+      const values = form.getFieldsValue(true);
       const data: CreateMCPServerInput = {
         name: values.name,
         display_name: values.display_name,
@@ -1047,7 +1049,8 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
 
     form
       .validateFields()
-      .then((values) => {
+      .then(() => {
+        const values = form.getFieldsValue(true);
         const data: CreateMCPServerInput = {
           name: values.name,
           display_name: values.display_name,
@@ -1119,7 +1122,7 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
       return;
     }
 
-    const values = form.getFieldsValue();
+    const values = form.getFieldsValue(true);
 
     // Validate required fields for connection test
     if (!values.url) {
@@ -1291,7 +1294,8 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
     if (!editingServer || !client) return;
 
     try {
-      const values = await form.validateFields();
+      await form.validateFields();
+      const values = form.getFieldsValue(true);
 
       const updates: UpdateMCPServerInput = {
         display_name: values.display_name,
