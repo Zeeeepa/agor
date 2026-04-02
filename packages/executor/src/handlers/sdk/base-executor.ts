@@ -423,7 +423,7 @@ export async function executeToolTask(params: {
         );
       }
 
-      // Compute cumulative context window usage (BEFORE the patch to avoid DB deadlocks)
+      // Compute context window usage using tool-specific logic
       if (tool.computeContextWindow) {
         try {
           const contextWindow = await tool.computeContextWindow(
