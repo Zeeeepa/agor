@@ -1,5 +1,6 @@
 import type { AgorClient } from '@agor/core/api';
 import type { Board, MCPServer, Repo, Session, User, Worktree } from '@agor/core/types';
+import { hasMinimumRole, ROLES } from '@agor/core/types';
 import { DeleteOutlined, FolderOutlined, LinkOutlined } from '@ant-design/icons';
 import { Button, Descriptions, Form, Input, Select, Space, Tooltip, Typography } from 'antd';
 import { useEffect, useState } from 'react';
@@ -85,6 +86,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
   ]);
 
   // Load worktree owners to check edit permissions
+  const [rbacActive, setRbacActive] = useState(true);
   useEffect(() => {
     if (!client) {
       setLoadingOwners(false);
@@ -98,9 +100,11 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
           route: { id: worktree.worktree_id },
         });
         setOwners(ownersResponse as User[]);
+        setRbacActive(true);
       } catch (_error) {
         // If RBAC is disabled or service not found, allow all edits
         setOwners([]);
+        setRbacActive(false);
       } finally {
         setLoadingOwners(false);
       }
@@ -110,14 +114,13 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
   }, [client, worktree.worktree_id]);
 
   // Check if current user can edit this worktree
-  // Owners can edit, AND admins have super powers (can edit any worktree)
+  // When RBAC is disabled, all authenticated members can edit
+  // When RBAC is enabled, owners and admins can edit
   const currentUserId = currentUser?.user_id;
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+  const isAdmin = hasMinimumRole(currentUser?.role, ROLES.ADMIN);
   const isOwner = owners.some((o) => o.user_id === currentUserId);
 
-  // While loading, assume admins can edit (we know their role immediately)
-  // After loading, check ownership OR admin status
-  const canEdit = loadingOwners ? isAdmin : isAdmin || isOwner;
+  const canEdit = loadingOwners ? isAdmin : !rbacActive || isAdmin || isOwner;
 
   const mcpChanged =
     JSON.stringify([...mcpServerIds].sort()) !==

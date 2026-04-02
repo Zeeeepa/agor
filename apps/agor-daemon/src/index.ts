@@ -370,6 +370,7 @@ function isPaginated<T>(result: T[] | Paginated<T>): result is Paginated<T> {
   return !Array.isArray(result) && 'data' in result && 'total' in result;
 }
 
+import { hasMinimumRole, ROLES } from '@agor/core/types';
 import compression from 'compression';
 import cors from 'cors';
 import express from 'express';
@@ -413,6 +414,7 @@ import { AnonymousStrategy } from './strategies/anonymous';
 import {
   ensureMinimumRole,
   registerAuthenticatedRoute,
+  requireAdminForEnvConfig,
   requireMinimumRole,
 } from './utils/authorization';
 import { createUploadMiddleware } from './utils/upload';
@@ -2189,8 +2191,7 @@ async function main() {
             if (params?.provider && params.user) {
               const userId = params.user.user_id;
               const userRole = params.user.role?.toLowerCase();
-              const isAdmin =
-                userRole === 'admin' || userRole === 'superadmin' || userRole === 'owner';
+              const isAdmin = hasMinimumRole(userRole, ROLES.ADMIN);
               const isOwner = server.owner_user_id === userId;
 
               if (server.scope === 'global' && !isOwner && !isAdmin) {
@@ -2222,8 +2223,7 @@ async function main() {
           if (params?.provider && params.user) {
             const userId = params.user.user_id;
             const userRole = params.user.role?.toLowerCase();
-            const isAdmin =
-              userRole === 'admin' || userRole === 'superadmin' || userRole === 'owner';
+            const isAdmin = hasMinimumRole(userRole, ROLES.ADMIN);
             const isOwner = server.owner_user_id === userId;
 
             // For global servers, allow owner or admin
@@ -2781,11 +2781,11 @@ async function main() {
 
         try {
           const user = await usersService.get(userId as UserID);
-          if (user.role === 'superadmin') {
+          if (user.role === ROLES.SUPERADMIN) {
             continue; // Already promoted
           }
 
-          await usersService.patch(userId as UserID, { role: 'superadmin' });
+          await usersService.patch(userId as UserID, { role: ROLES.SUPERADMIN });
           promotedCount++;
           console.log(
             `[RBAC] Bootstrap promoted user ${userId.substring(0, 8)} (${user.email}) to superadmin`
@@ -2817,7 +2817,7 @@ async function main() {
           : []),
       ],
       create: [
-        requireMinimumRole('member', 'create messages'),
+        requireMinimumRole(ROLES.MEMBER, 'create messages'),
         ...(worktreeRbacEnabled
           ? [
               resolveSessionContext(),
@@ -2829,7 +2829,7 @@ async function main() {
           : []),
       ],
       patch: [
-        requireMinimumRole('member', 'update messages'),
+        requireMinimumRole(ROLES.MEMBER, 'update messages'),
         ...(worktreeRbacEnabled
           ? [
               resolveSessionContext(),
@@ -2840,7 +2840,7 @@ async function main() {
           : []),
       ],
       remove: [
-        requireMinimumRole('member', 'delete messages'),
+        requireMinimumRole(ROLES.MEMBER, 'delete messages'),
         ...(worktreeRbacEnabled
           ? [
               resolveSessionContext(),
@@ -2894,7 +2894,7 @@ async function main() {
         // biome-ignore lint/suspicious/noExplicitAny: FeathersJS hook type compatibility
         (validateQuery as any)(boardObjectQueryValidator),
         ...getReadAuthHooks(),
-        ...(allowAnonymous ? [] : [requireMinimumRole('member', 'manage board objects')]),
+        ...(allowAnonymous ? [] : [requireMinimumRole(ROLES.MEMBER, 'manage board objects')]),
       ],
     },
     after: {
@@ -2972,18 +2972,18 @@ async function main() {
   app.service('card-types').hooks({
     before: {
       all: [...getReadAuthHooks()],
-      create: [requireMinimumRole('member', 'create card types')],
-      patch: [requireMinimumRole('member', 'update card types')],
-      remove: [requireMinimumRole('member', 'delete card types')],
+      create: [requireMinimumRole(ROLES.MEMBER, 'create card types')],
+      patch: [requireMinimumRole(ROLES.MEMBER, 'update card types')],
+      remove: [requireMinimumRole(ROLES.MEMBER, 'delete card types')],
     },
   });
 
   app.service('cards').hooks({
     before: {
       all: [...getReadAuthHooks()],
-      create: [requireMinimumRole('member', 'create cards')],
-      patch: [requireMinimumRole('member', 'update cards')],
-      remove: [requireMinimumRole('member', 'delete cards')],
+      create: [requireMinimumRole(ROLES.MEMBER, 'create cards')],
+      patch: [requireMinimumRole(ROLES.MEMBER, 'update cards')],
+      remove: [requireMinimumRole(ROLES.MEMBER, 'delete cards')],
     },
   });
 
@@ -2994,9 +2994,9 @@ async function main() {
         (validateQuery as any)(boardCommentQueryValidator),
         ...getReadAuthHooks(),
       ],
-      create: [requireMinimumRole('member', 'create board comments')],
-      patch: [requireMinimumRole('member', 'update board comments')],
-      remove: [requireMinimumRole('member', 'delete board comments')],
+      create: [requireMinimumRole(ROLES.MEMBER, 'create board comments')],
+      patch: [requireMinimumRole(ROLES.MEMBER, 'update board comments')],
+      remove: [requireMinimumRole(ROLES.MEMBER, 'delete board comments')],
       // Board comments are scoped to worktrees - check permissions based on parent board object
       // TODO: Implement worktree-level permission checks for board comments
       // For now, keep existing role-based authorization
@@ -3009,11 +3009,12 @@ async function main() {
         // biome-ignore lint/suspicious/noExplicitAny: FeathersJS hook type compatibility
         (validateQuery as any)(repoQueryValidator),
         ...getReadAuthHooks(),
-        ...(allowAnonymous ? [] : [requireMinimumRole('member', 'access repositories')]),
+        ...(allowAnonymous ? [] : [requireMinimumRole(ROLES.MEMBER, 'access repositories')]),
       ],
-      create: [requireMinimumRole('member', 'create repositories')],
-      patch: [requireMinimumRole('member', 'update repositories')],
-      remove: [requireMinimumRole('member', 'delete repositories')],
+      create: [requireMinimumRole(ROLES.MEMBER, 'create repositories'), requireAdminForEnvConfig()],
+      update: [requireMinimumRole(ROLES.MEMBER, 'update repositories'), requireAdminForEnvConfig()],
+      patch: [requireMinimumRole(ROLES.MEMBER, 'update repositories'), requireAdminForEnvConfig()],
+      remove: [requireMinimumRole(ROLES.MEMBER, 'delete repositories')],
     },
   });
 
@@ -3023,7 +3024,7 @@ async function main() {
         // biome-ignore lint/suspicious/noExplicitAny: FeathersJS hook type compatibility
         (validateQuery as any)(worktreeQueryValidator),
         ...getReadAuthHooks(),
-        ...(allowAnonymous ? [] : [requireMinimumRole('member', 'access worktrees')]),
+        ...(allowAnonymous ? [] : [requireMinimumRole(ROLES.MEMBER, 'access worktrees')]),
       ],
       find: [
         // RBAC: Optimized SQL-based filtering (single query with JOIN, no N+1)
@@ -3037,8 +3038,10 @@ async function main() {
             ]
           : []),
       ],
-      create: [requireMinimumRole('member', 'create worktrees')],
+      create: [requireMinimumRole(ROLES.MEMBER, 'create worktrees'), requireAdminForEnvConfig()],
+      update: [requireMinimumRole(ROLES.MEMBER, 'update worktrees'), requireAdminForEnvConfig()],
       patch: [
+        requireAdminForEnvConfig(),
         ...(worktreeRbacEnabled
           ? [
               loadWorktree(worktreeRepository),
@@ -3293,9 +3296,9 @@ async function main() {
         (validateQuery as any)(mcpServerQueryValidator),
         ...getReadAuthHooks(),
       ],
-      create: [requireMinimumRole('admin', 'create MCP servers')],
-      patch: [requireMinimumRole('admin', 'update MCP servers')],
-      remove: [requireMinimumRole('admin', 'delete MCP servers')],
+      create: [requireMinimumRole(ROLES.ADMIN, 'create MCP servers')],
+      patch: [requireMinimumRole(ROLES.ADMIN, 'update MCP servers')],
+      remove: [requireMinimumRole(ROLES.ADMIN, 'delete MCP servers')],
     },
     after: {
       find: [injectPerUserOAuthTokens],
@@ -3306,7 +3309,7 @@ async function main() {
   app.service('session-mcp-servers').hooks({
     before: {
       all: [requireAuth],
-      find: [requireMinimumRole('member', 'list session MCP servers')],
+      find: [requireMinimumRole(ROLES.MEMBER, 'list session MCP servers')],
     },
     after: {
       find: [injectPerUserOAuthTokens],
@@ -3353,9 +3356,9 @@ async function main() {
   app.service('gateway-channels').hooks({
     before: {
       all: [requireAuth],
-      create: [requireMinimumRole('member', 'create gateway channels')],
-      patch: [requireMinimumRole('member', 'update gateway channels')],
-      remove: [requireMinimumRole('member', 'delete gateway channels')],
+      create: [requireMinimumRole(ROLES.MEMBER, 'create gateway channels')],
+      patch: [requireMinimumRole(ROLES.MEMBER, 'update gateway channels')],
+      remove: [requireMinimumRole(ROLES.MEMBER, 'delete gateway channels')],
     },
     after: {
       all: [
@@ -3404,9 +3407,9 @@ async function main() {
   app.service('config').hooks({
     before: {
       all: [requireAuth],
-      find: [requireMinimumRole('admin', 'view configuration')],
-      get: [requireMinimumRole('admin', 'view configuration')],
-      patch: [requireMinimumRole('admin', 'update configuration')],
+      find: [requireMinimumRole(ROLES.ADMIN, 'view configuration')],
+      get: [requireMinimumRole(ROLES.ADMIN, 'view configuration')],
+      patch: [requireMinimumRole(ROLES.ADMIN, 'update configuration')],
     },
   });
 
@@ -3418,13 +3421,13 @@ async function main() {
 
   app.service('files').hooks({
     before: {
-      all: [requireAuth, requireMinimumRole('member', 'search files')],
+      all: [requireAuth, requireMinimumRole(ROLES.MEMBER, 'search files')],
     },
   });
 
   app.service('terminals').hooks({
     before: {
-      all: [requireAuth, requireMinimumRole('admin', 'access terminals')],
+      all: [requireAuth, requireMinimumRole(ROLES.ADMIN, 'access terminals')],
     },
   });
 
@@ -3443,7 +3446,7 @@ async function main() {
           }
 
           if (params.user) {
-            ensureMinimumRole(params, 'member', 'list users');
+            ensureMinimumRole(params, ROLES.MEMBER, 'list users');
             return context;
           }
 
@@ -3459,7 +3462,7 @@ async function main() {
       ],
       get: [
         (context) => {
-          ensureMinimumRole(context.params as AuthenticatedParams, 'member', 'view users');
+          ensureMinimumRole(context.params as AuthenticatedParams, ROLES.MEMBER, 'view users');
           return context;
         },
       ],
@@ -3473,16 +3476,16 @@ async function main() {
 
           const existing = (await usersService.find({ query: { $limit: 1 } })) as Paginated<User>;
           if (existing.total > 0) {
-            ensureMinimumRole(params, 'admin', 'create users');
+            ensureMinimumRole(params, ROLES.ADMIN, 'create users');
           }
 
           // Only superadmins can create superadmin users
           // Guard both 'superadmin' and legacy 'owner' to prevent bypass
           // biome-ignore lint/suspicious/noExplicitAny: Feathers context data
           const data = context.data as any;
-          if (data?.role === 'superadmin' || data?.role === 'owner') {
+          if (hasMinimumRole(data?.role, ROLES.SUPERADMIN)) {
             const callerRole = params.user?.role;
-            if (callerRole !== 'superadmin' && callerRole !== 'owner') {
+            if (!hasMinimumRole(callerRole, ROLES.SUPERADMIN)) {
               throw new Forbidden('Only superadmins can create superadmin users');
             }
           }
@@ -3495,8 +3498,7 @@ async function main() {
           const params = context.params as AuthenticatedParams;
           const userId = context.id as string;
           const callerRole = params.user?.role;
-          const callerIsAdmin =
-            callerRole === 'admin' || callerRole === 'superadmin' || callerRole === 'owner';
+          const callerIsAdmin = hasMinimumRole(callerRole, ROLES.ADMIN);
 
           // Field-level restrictions: only admins can modify unix_username, role, and must_change_password
           if (!Array.isArray(context.data)) {
@@ -3512,14 +3514,13 @@ async function main() {
               // Only superadmins can assign the superadmin role
               // Guard both 'superadmin' and legacy 'owner' to prevent bypass
               if (
-                (context.data.role === 'superadmin' || context.data.role === 'owner') &&
-                callerRole !== 'superadmin' &&
-                callerRole !== 'owner'
+                hasMinimumRole(context.data.role, ROLES.SUPERADMIN) &&
+                !hasMinimumRole(callerRole, ROLES.SUPERADMIN)
               ) {
                 // Bootstrap: allow first superadmin promotion if none exist yet
                 // Note: usersService.find() doesn't filter by role, so filter in JS
                 const allUsers = (await usersService.find({})) as Paginated<User>;
-                const hasSuperadmin = allUsers.data.some((u) => u.role === 'superadmin');
+                const hasSuperadmin = allUsers.data.some((u) => u.role === ROLES.SUPERADMIN);
                 if (hasSuperadmin) {
                   throw new Forbidden('Only superadmins can assign the superadmin role');
                 }
@@ -3546,7 +3547,7 @@ async function main() {
           throw new Forbidden('You can only update your own profile');
         },
       ],
-      remove: [requireMinimumRole('admin', 'delete users')],
+      remove: [requireMinimumRole(ROLES.ADMIN, 'delete users')],
     },
     after: {
       // After user create/patch: optionally ensure Unix user exists and sync password
@@ -3687,7 +3688,7 @@ async function main() {
           : []),
       ],
       create: [
-        requireMinimumRole('member', 'create sessions'),
+        requireMinimumRole(ROLES.MEMBER, 'create sessions'),
         ...(worktreeRbacEnabled
           ? [
               setSessionUnixUsername(usersRepository), // Stamp session with creator's unix_username (MUST run first)
@@ -4066,7 +4067,7 @@ async function main() {
           : []),
       ],
       create: [
-        requireMinimumRole('member', 'create tasks'),
+        requireMinimumRole(ROLES.MEMBER, 'create tasks'),
         ...(worktreeRbacEnabled
           ? [
               resolveSessionContext(),
@@ -4109,7 +4110,7 @@ async function main() {
             ]
           : []),
       ],
-      remove: [requireMinimumRole('member', 'delete tasks')],
+      remove: [requireMinimumRole(ROLES.MEMBER, 'delete tasks')],
     },
   });
 
@@ -4121,7 +4122,7 @@ async function main() {
         ...getReadAuthHooks(),
       ],
       create: [
-        requireMinimumRole('member', 'create boards'),
+        requireMinimumRole(ROLES.MEMBER, 'create boards'),
         async (context: HookContext<Board>) => {
           // Inject user_id if authenticated, otherwise use 'anonymous'
           const userId =
@@ -4139,7 +4140,7 @@ async function main() {
         },
       ],
       patch: [
-        requireMinimumRole('member', 'update boards'),
+        requireMinimumRole(ROLES.MEMBER, 'update boards'),
         async (context: HookContext<Board>) => {
           // Handle atomic board object operations via _action parameter
           const contextData = context.data || {};
@@ -4237,12 +4238,12 @@ async function main() {
           return context;
         },
       ],
-      remove: [requireMinimumRole('member', 'delete boards')],
-      toBlob: [requireMinimumRole('member', 'export boards')],
-      toYaml: [requireMinimumRole('member', 'export boards')],
-      fromBlob: [requireMinimumRole('member', 'import boards')],
-      fromYaml: [requireMinimumRole('member', 'import boards')],
-      clone: [requireMinimumRole('member', 'clone boards')],
+      remove: [requireMinimumRole(ROLES.MEMBER, 'delete boards')],
+      toBlob: [requireMinimumRole(ROLES.MEMBER, 'export boards')],
+      toYaml: [requireMinimumRole(ROLES.MEMBER, 'export boards')],
+      fromBlob: [requireMinimumRole(ROLES.MEMBER, 'import boards')],
+      fromYaml: [requireMinimumRole(ROLES.MEMBER, 'import boards')],
+      clone: [requireMinimumRole(ROLES.MEMBER, 'clone boards')],
     },
     after: {
       // Emit created events for custom methods that create boards
@@ -4286,7 +4287,7 @@ async function main() {
 
   app.service('/boards/:id/archive').hooks({
     before: {
-      create: [requireAuth, requireMinimumRole('member', 'archive boards')],
+      create: [requireAuth, requireMinimumRole(ROLES.MEMBER, 'archive boards')],
     },
   });
 
@@ -4301,7 +4302,7 @@ async function main() {
 
   app.service('/boards/:id/unarchive').hooks({
     before: {
-      create: [requireAuth, requireMinimumRole('member', 'unarchive boards')],
+      create: [requireAuth, requireMinimumRole(ROLES.MEMBER, 'unarchive boards')],
     },
   });
 
@@ -4681,7 +4682,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'create messages' },
+      create: { role: ROLES.MEMBER, action: 'create messages' },
     },
     requireAuth
   );
@@ -4708,7 +4709,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'broadcast streaming events' },
+      create: { role: ROLES.MEMBER, action: 'broadcast streaming events' },
     },
     requireAuth
   );
@@ -4739,7 +4740,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'fork sessions' },
+      create: { role: ROLES.MEMBER, action: 'fork sessions' },
     },
     requireAuth
   );
@@ -4769,7 +4770,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'spawn sessions' },
+      create: { role: ROLES.MEMBER, action: 'spawn sessions' },
     },
     requireAuth
   );
@@ -4787,7 +4788,7 @@ async function main() {
       // biome-ignore lint/suspicious/noExplicitAny: FeathersJS route handler type mismatch with Express RouteParams
     } as any,
     {
-      find: { role: 'member', action: 'view session genealogy' },
+      find: { role: ROLES.MEMBER, action: 'view session genealogy' },
     },
     requireAuth
   );
@@ -5138,7 +5139,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'execute prompts' },
+      create: { role: ROLES.MEMBER, action: 'execute prompts' },
     },
     requireAuth
   );
@@ -5187,7 +5188,7 @@ async function main() {
         });
       }
 
-      ensureMinimumRole(params, 'member', 'upload files');
+      ensureMinimumRole(params, ROLES.MEMBER, 'upload files');
 
       // Verify user has access to this session (session-level ACL)
       const session = await sessionsService.get(sessionId, params);
@@ -5515,7 +5516,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'stop sessions' },
+      create: { role: ROLES.MEMBER, action: 'stop sessions' },
     },
     requireAuth
   );
@@ -5574,8 +5575,8 @@ async function main() {
       // biome-ignore lint/suspicious/noExplicitAny: Service type not compatible with Express
     } as any,
     {
-      create: { role: 'member', action: 'queue messages' },
-      find: { role: 'member', action: 'view queue' },
+      create: { role: ROLES.MEMBER, action: 'queue messages' },
+      find: { role: ROLES.MEMBER, action: 'view queue' },
     },
     requireAuth
   );
@@ -5859,7 +5860,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'respond to permission requests' },
+      create: { role: ROLES.MEMBER, action: 'respond to permission requests' },
     },
     requireAuth
   );
@@ -5948,7 +5949,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'respond to input requests' },
+      create: { role: ROLES.MEMBER, action: 'respond to input requests' },
     },
     requireAuth
   );
@@ -5966,7 +5967,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'create tasks' },
+      create: { role: ROLES.MEMBER, action: 'create tasks' },
     },
     requireAuth
   );
@@ -5985,7 +5986,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'complete tasks' },
+      create: { role: ROLES.MEMBER, action: 'complete tasks' },
     },
     requireAuth
   );
@@ -6001,7 +6002,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'fail tasks' },
+      create: { role: ROLES.MEMBER, action: 'fail tasks' },
     },
     requireAuth
   );
@@ -6018,7 +6019,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'add local repositories' },
+      create: { role: ROLES.MEMBER, action: 'add local repositories' },
     },
     requireAuth
   );
@@ -6035,7 +6036,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'clone repositories' },
+      create: { role: ROLES.MEMBER, action: 'clone repositories' },
     },
     requireAuth
   );
@@ -6068,7 +6069,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'create worktrees' },
+      create: { role: ROLES.MEMBER, action: 'create worktrees' },
     },
     requireAuth
   );
@@ -6086,7 +6087,7 @@ async function main() {
       },
     },
     {
-      remove: { role: 'member', action: 'remove worktrees' },
+      remove: { role: ROLES.MEMBER, action: 'remove worktrees' },
     },
     requireAuth
   );
@@ -6102,7 +6103,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'import .agor.yml' },
+      create: { role: ROLES.ADMIN, action: 'import environment config from .agor.yml' },
     },
     requireAuth
   );
@@ -6118,7 +6119,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'export .agor.yml' },
+      create: { role: ROLES.MEMBER, action: 'export .agor.yml' },
     },
     requireAuth
   );
@@ -6154,7 +6155,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'react to board comments' },
+      create: { role: ROLES.MEMBER, action: 'react to board comments' },
     },
     requireAuth
   );
@@ -6176,7 +6177,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'reply to board comments' },
+      create: { role: ROLES.MEMBER, action: 'reply to board comments' },
     },
     requireAuth
   );
@@ -6201,7 +6202,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'admin', action: 'start worktree environments' },
+      create: { role: ROLES.ADMIN, action: 'start worktree environments' },
     },
     requireAuth
   );
@@ -6221,7 +6222,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'admin', action: 'stop worktree environments' },
+      create: { role: ROLES.ADMIN, action: 'stop worktree environments' },
     },
     requireAuth
   );
@@ -6241,7 +6242,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'admin', action: 'restart worktree environments' },
+      create: { role: ROLES.ADMIN, action: 'restart worktree environments' },
     },
     requireAuth
   );
@@ -6261,7 +6262,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'admin', action: 'nuke worktree environments' },
+      create: { role: ROLES.ADMIN, action: 'nuke worktree environments' },
     },
     requireAuth
   );
@@ -6279,7 +6280,7 @@ async function main() {
       // biome-ignore lint/suspicious/noExplicitAny: Service type not compatible with Express
     } as any,
     {
-      find: { role: 'member', action: 'check worktree health' },
+      find: { role: ROLES.MEMBER, action: 'check worktree health' },
     },
     requireAuth
   );
@@ -6306,7 +6307,7 @@ async function main() {
     before: {
       create: [
         requireAuth,
-        requireMinimumRole('member', 'archive or delete worktrees'),
+        requireMinimumRole(ROLES.MEMBER, 'archive or delete worktrees'),
         // Load worktree from route param and check ownership (always run, even if RBAC disabled)
         async (context: HookContext) => {
           const id = context.params.route?.id;
@@ -6341,12 +6342,7 @@ async function main() {
               // biome-ignore lint/suspicious/noExplicitAny: FeathersJS params type
               const userRole = (context.params as any).user?.role;
 
-              if (
-                !isOwner &&
-                userRole !== 'admin' &&
-                userRole !== 'superadmin' &&
-                userRole !== 'owner'
-              ) {
+              if (!isOwner && !hasMinimumRole(userRole, ROLES.ADMIN)) {
                 throw new Forbidden(
                   'You must be the worktree owner or a global admin to archive/delete worktrees'
                 );
@@ -6376,7 +6372,7 @@ async function main() {
     before: {
       create: [
         requireAuth,
-        requireMinimumRole('member', 'unarchive worktrees'),
+        requireMinimumRole(ROLES.MEMBER, 'unarchive worktrees'),
         // Load worktree from route param and check ownership (always run, even if RBAC disabled)
         async (context: HookContext) => {
           const id = context.params.route?.id;
@@ -6411,12 +6407,7 @@ async function main() {
               // biome-ignore lint/suspicious/noExplicitAny: FeathersJS params type
               const userRole = (context.params as any).user?.role;
 
-              if (
-                !isOwner &&
-                userRole !== 'admin' &&
-                userRole !== 'superadmin' &&
-                userRole !== 'owner'
-              ) {
+              if (!isOwner && !hasMinimumRole(userRole, ROLES.ADMIN)) {
                 throw new Forbidden(
                   'You must be the worktree owner or a global admin to unarchive worktrees'
                 );
@@ -6449,7 +6440,7 @@ async function main() {
       // biome-ignore lint/suspicious/noExplicitAny: Service type not compatible with Express
     } as any,
     {
-      find: { role: 'member', action: 'view worktree logs' },
+      find: { role: ROLES.MEMBER, action: 'view worktree logs' },
     },
     requireAuth
   );
@@ -6472,7 +6463,7 @@ async function main() {
       },
     },
     {
-      create: { role: 'member', action: 'modify board sessions' },
+      create: { role: ROLES.MEMBER, action: 'modify board sessions' },
     },
     requireAuth
   );
@@ -6555,10 +6546,10 @@ async function main() {
       // biome-ignore lint/suspicious/noExplicitAny: Service type not compatible with Express
     } as any,
     {
-      find: { role: 'member', action: 'view session MCP servers' },
-      create: { role: 'member', action: 'modify session MCP servers' },
-      remove: { role: 'member', action: 'modify session MCP servers' },
-      patch: { role: 'member', action: 'modify session MCP servers' },
+      find: { role: ROLES.MEMBER, action: 'view session MCP servers' },
+      create: { role: ROLES.MEMBER, action: 'modify session MCP servers' },
+      remove: { role: ROLES.MEMBER, action: 'modify session MCP servers' },
+      patch: { role: ROLES.MEMBER, action: 'modify session MCP servers' },
     },
     requireAuth
   );

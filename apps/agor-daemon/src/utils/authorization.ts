@@ -3,31 +3,10 @@
  */
 
 import { Forbidden, NotAuthenticated } from '@agor/core/feathers';
-import type { AuthenticatedParams, HookContext } from '@agor/core/types';
+import type { AuthenticatedParams, HookContext, UserRole } from '@agor/core/types';
+import { hasMinimumRole, ROLES } from '@agor/core/types';
 
-export type Role = 'superadmin' | 'admin' | 'member' | 'viewer';
-
-const ROLE_RANK: Record<string, number> = {
-  viewer: 0,
-  member: 1,
-  admin: 2,
-  superadmin: 3,
-  owner: 3, // Deprecated alias for superadmin (backwards compat)
-};
-
-/**
- * Determine whether a role meets or exceeds the minimum role requirement.
- */
-function hasMinimumRole(userRole: string | undefined, minimumRole: Role): boolean {
-  if (!userRole) {
-    return minimumRole === 'viewer';
-  }
-
-  const normalizedRole = (userRole.toLowerCase() as Role) || 'viewer';
-  const userRank = ROLE_RANK[normalizedRole] ?? ROLE_RANK.viewer;
-  const requiredRank = ROLE_RANK[minimumRole];
-  return userRank >= requiredRank;
-}
+export type Role = UserRole;
 
 /**
  * Ensure the request is authenticated and has the minimum required role.
@@ -71,6 +50,53 @@ export function requireMinimumRole(minimumRole: Role, action?: string) {
 }
 
 /**
+ * Fields that contain executable commands or environment configuration.
+ * Repos store templates in `environment_config`; worktrees store resolved values
+ * as top-level fields. Both execute as the system user and require admin access.
+ */
+const ENV_COMMAND_FIELDS = [
+  'environment_config', // Repo-level: template object
+  'start_command', // Worktree-level: resolved commands
+  'stop_command',
+  'nuke_command',
+  'logs_command',
+  'health_check_url',
+  'app_url',
+];
+
+/**
+ * Feathers hook that requires admin role when environment command fields are being modified.
+ *
+ * Environment commands execute as the system user, so only admins/superadmins
+ * may set or change them. Works for both repo-level (environment_config) and
+ * worktree-level (start_command, stop_command, etc.) fields.
+ */
+export function requireAdminForEnvConfig() {
+  return (context: HookContext) => {
+    // biome-ignore lint/suspicious/noExplicitAny: context.data shape varies per service
+    const data = context.data as any;
+
+    // Check both single objects and array payloads (bulk create)
+    const items = Array.isArray(data) ? data : [data];
+    const hasEnvConfig = items.some((item: Record<string, unknown>) =>
+      ENV_COMMAND_FIELDS.some((field) => item?.[field] != null)
+    );
+    if (!hasEnvConfig) {
+      return context;
+    }
+
+    // Internal calls and service accounts bypass (handled by ensureMinimumRole)
+    ensureMinimumRole(
+      context.params,
+      ROLES.ADMIN,
+      'modify environment commands (up_command, down_command, etc.)'
+    );
+
+    return context;
+  };
+}
+
+/**
  * Helper to register authenticated custom routes with hooks.
  *
  * This utility reduces boilerplate when creating custom Feathers routes that require authentication.
@@ -92,7 +118,7 @@ export function requireMinimumRole(minimumRole: Role, action?: string) {
  *     }
  *   },
  *   {
- *     create: { role: 'member', action: 'spawn sessions' }
+ *     create: { role: ROLES.MEMBER, action: 'spawn sessions' }
  *   },
  *   requireAuth
  * );
