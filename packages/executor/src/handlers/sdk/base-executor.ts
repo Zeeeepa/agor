@@ -421,6 +421,12 @@ export async function executeToolTask(params: {
         console.log(
           `[${toolName}] Normalized SDK response: ${normalized.tokenUsage.totalTokens} tokens, $${normalized.costUsd?.toFixed(4) ?? 'N/A'}`
         );
+
+        // Extract model from normalized response to display correct model tag in UI
+        if (normalized.primaryModel) {
+          patchData.model = normalized.primaryModel;
+          console.log(`[${toolName}] Task model set to: ${normalized.primaryModel}`);
+        }
       }
 
       // Compute context window usage using tool-specific logic
