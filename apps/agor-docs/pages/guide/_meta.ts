@@ -14,6 +14,7 @@ export default {
   'message-gateway': 'Message Gateway (Beta)',
   'advanced-features': 'Advanced Features',
   cards: 'Cards (Beta)',
+  artifacts: 'Artifacts (Beta)',
   architecture: 'Architecture',
   'sdk-comparison': 'SDK Comparison',
   '--- Development': {

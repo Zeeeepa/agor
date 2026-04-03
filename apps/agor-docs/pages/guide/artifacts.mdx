@@ -1,0 +1,151 @@
+---
+title: Artifacts
+description: Live, interactive Sandpack applications that agents build and render directly on boards
+---
+
+# Artifacts
+
+<div style={{
+  marginTop: '16px',
+  marginBottom: '24px',
+  padding: '12px 16px',
+  border: '1px solid #d4940a',
+  borderRadius: '8px',
+  backgroundColor: 'rgba(212, 148, 10, 0.08)',
+  fontSize: '14px'
+}}>
+**Beta** — Artifacts are a new board primitive. The MCP tools and rendering are functional, but templates and build tooling are still evolving.
+</div>
+
+Artifacts are live, interactive applications that agents create and render directly on the board canvas. An agent scaffolds a small app via MCP, writes code into it, and you see it running — no deploy, no preview URL, no context switching.
+
+Under the hood, artifacts are powered by [Sandpack](https://sandpack.codesandbox.io/), the open-source in-browser bundler by [CodeSandbox](https://codesandbox.io/). A directory of source files inside the worktree gets compiled and rendered live in the browser — no server-side build step needed. The agent writes code, the board shows the result.
+
+---
+
+## How it works
+
+1. **Agent creates an artifact** via `agor_artifacts_create` — picks a template (React, vanilla JS, etc.), names it, and optionally provides initial files
+2. **Agor scaffolds the directory** at `.agor/artifacts/<id>/` inside the worktree, writes a `sandpack.json` manifest and source files
+3. **The artifact appears on the board** as an interactive node with a live Sandpack preview
+4. **Agent edits files** using normal file tools, then calls `agor_artifacts_refresh` to push changes to the board
+5. **You interact with the running app** directly on the canvas — click buttons, fill forms, see state updates
+
+---
+
+## Artifact anatomy
+
+Each artifact is a filesystem directory plus a database record:
+
+**On disk** (inside the worktree):
+```
+.agor/artifacts/<artifact-id>/
+  sandpack.json        # Manifest: template, dependencies, entry point
+  App.tsx              # Source files (varies by template)
+  styles.css
+  ...
+```
+
+**On the board:**
+- **Header** — Artifact name with an interact toggle (eye icon)
+- **Preview** — Live Sandpack renderer showing the running application
+- **Interact mode** — Toggle to interact with the app (click buttons, type inputs) vs. normal canvas navigation
+
+---
+
+## Templates
+
+Artifacts support several Sandpack templates:
+
+| Template | Language | Entry point |
+|----------|----------|-------------|
+| `react` | JavaScript + JSX | `App.js` |
+| `react-ts` | TypeScript + TSX | `App.tsx` |
+| `vanilla` | Plain JavaScript | `index.js` + `index.html` |
+| `vanilla-ts` | TypeScript | `index.ts` + `index.html` |
+
+Agents can also provide custom files and dependencies at creation time — the template just determines the default scaffold.
+
+---
+
+## MCP tools
+
+Agents manage artifacts through Agor's [MCP tools](/guide/internal-mcp):
+
+| Tool | Purpose |
+|------|---------|
+| `agor_artifacts_create` | Scaffold a new artifact with template, files, and board placement |
+| `agor_artifacts_check_build` | Verify source files exist and are non-empty |
+| `agor_artifacts_refresh` | Re-read filesystem and push updates to connected clients |
+| `agor_artifacts_get_status` | Get build status + console logs for debugging |
+| `agor_artifacts_console_log` | Append runtime console entries (for agent debugging) |
+
+The typical agent workflow: **create** the artifact, **edit files** with standard file tools, **check build** to verify structure, then **refresh** to push changes live.
+
+---
+
+## Interacting with artifacts
+
+Artifacts live on the React Flow canvas, which means mouse events need careful handling:
+
+- **Default mode** — Canvas zoom/pan/drag works normally over the artifact. The preview is visible but non-interactive
+- **Interact mode** — Click the eye icon in the header to enable direct interaction. Mouse events pass through to the iframe so you can click buttons, scroll, and type
+
+This toggle prevents the iframe from capturing canvas navigation while still letting you use the running app when needed.
+
+---
+
+## Managing artifacts
+
+**Settings > Artifacts** provides a management view for all artifacts across the instance. From there you can:
+
+- View artifact metadata (name, template, build status, worktree, board)
+- Edit name and description
+- Delete artifacts (removes filesystem directory, board placement, and database record)
+
+Artifacts are created exclusively by agents via MCP — there's no manual creation UI. The Settings table is for oversight and cleanup.
+
+---
+
+## Beyond frontend
+
+Sandpack's [Nodebox](https://sandpack.codesandbox.io/docs/advanced-usage/nodebox) runtime can execute Node.js code directly in the browser, with out-of-the-box support for frameworks like Next.js, Vite, and Astro. This means artifacts aren't limited to pure client-side apps — you can prototype lightweight full-stack patterns too. The main limitation is that Nodebox can't access raw sockets, so native database drivers (Postgres, MySQL, MongoDB) won't work in-browser.
+
+For anything that needs a real backend, the artifact is still a great starting point — the code is just files in a directory.
+
+---
+
+## From prototype to production
+
+Artifacts are designed for rapid prototyping, not permanent hosting. When you're ready to ship, the graduation path is straightforward:
+
+1. **The code is already on disk** — artifact source files live at `.agor/artifacts/<id>/` inside your worktree. They're standard source files, not a proprietary format
+2. **Ask your agent to scaffold a real project** — "Take this artifact and set it up as a Next.js app" or "Create a Vite project from this prototype"
+3. **Pick your hosting** — Vercel, Netlify, Cloudflare Pages, a Docker container — the agent can set up deployment config for whatever platform you choose
+4. **Add what Sandpack can't do** — Real databases, server-side auth, API routes, environment variables — the things that need actual infrastructure
+
+The artifact gets you from idea to working UI in minutes. The agent gets you from prototype to deployed app when you're ready.
+
+---
+
+## Sandpack and CodeSandbox
+
+[Sandpack](https://sandpack.codesandbox.io/) is the open-source in-browser bundler that powers artifact rendering. It's built and maintained by the team at [CodeSandbox](https://codesandbox.io/), who also offer a full cloud development platform with collaborative VMs, instant environments, and team features. Sandpack itself is free and open-source (MIT licensed) — Agor uses the [`@codesandbox/sandpack-react`](https://www.npmjs.com/package/@codesandbox/sandpack-react) package.
+
+---
+
+## Security
+
+Artifact filesystem operations include containment guards:
+
+- **Path traversal protection** — All file paths are resolved and validated to stay within the worktree boundary
+- **Symlink filtering** — Symbolic links are skipped during file enumeration to prevent filesystem escape
+- **Browser sandboxing** — Artifacts render in [Sandpack's](https://sandpack.codesandbox.io/) in-browser bundler, isolated from the host
+
+---
+
+## Related docs
+
+- [Agor MCP Server](/guide/internal-mcp) — The MCP tools agents use to create and manage artifacts
+- [Cards](/guide/cards) — Another board primitive for non-code workflow entities
+- [Assistants](/guide/assistants) — Persistent agents that can create artifacts as part of their work
