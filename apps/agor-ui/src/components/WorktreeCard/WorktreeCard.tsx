@@ -1,5 +1,5 @@
 import type { AgorClient } from '@agor/core/api';
-import type { Repo, Session, SpawnConfig, User, Worktree } from '@agor/core/types';
+import type { Repo, Session, SessionID, SpawnConfig, User, Worktree } from '@agor/core/types';
 import {
   getAssistantConfig,
   getGatewaySource as getGatewaySourceCore,
@@ -14,10 +14,12 @@ import {
   DragOutlined,
   EditOutlined,
   ForkOutlined,
+  InboxOutlined,
   MessageOutlined,
   PlusOutlined,
   PushpinFilled,
   RobotOutlined,
+  SettingOutlined,
   SubnodeOutlined,
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
@@ -27,6 +29,7 @@ import {
   Card,
   Collapse,
   ConfigProvider,
+  message,
   Space,
   Spin,
   Tooltip,
@@ -37,6 +40,7 @@ import {
 import { AggregationColor } from 'antd/es/color-picker/color';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useConnectionDisabled } from '../../contexts/ConnectionContext';
+import { useSessionActions } from '../../hooks/useSessionActions';
 import { getSessionDisplayTitle, getSessionTitleStyles } from '../../utils/sessionTitle';
 import { ensureColorVisible, isDarkTheme } from '../../utils/theme';
 import { ArchiveDeleteWorktreeModal } from '../ArchiveDeleteWorktreeModal';
@@ -45,12 +49,80 @@ import { type ForkSpawnAction, ForkSpawnModal } from '../ForkSpawnModal';
 import { MarkdownRenderer } from '../MarkdownRenderer';
 import { CreatedByTag } from '../metadata';
 import { ChannelPill, IssuePill, PullRequestPill } from '../Pill';
-import { TaskStatusIcon } from '../TaskStatusIcon';
 import { ToolIcon } from '../ToolIcon';
 import { buildSessionTree, type SessionTreeNode } from './buildSessionTree';
 
 const _WORKTREE_CARD_MAX_WIDTH = 600;
 const NOTES_MAX_LENGTH = 200; // Character limit for truncated notes
+
+/** Wrapper that adds hover action buttons (settings + archive) overlay to session items */
+const SessionItemWithActions: React.FC<{
+  sessionId: string;
+  isArchiving: boolean;
+  onArchive: (sessionId: string, e: React.MouseEvent) => void;
+  onSettings?: (sessionId: string, e: React.MouseEvent) => void;
+  children: React.ReactNode;
+}> = ({ sessionId, isArchiving, onArchive, onSettings, children }) => {
+  const [hovered, setHovered] = useState(false);
+  const { token } = theme.useToken();
+
+  const buttonStyle: React.CSSProperties = {
+    background: `${token.colorBgContainer}cc`,
+    borderRadius: 4,
+    width: 24,
+    height: 24,
+    minWidth: 24,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
+
+  return (
+    <div
+      style={{ position: 'relative', minWidth: 120 }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {children}
+      <div
+        style={{
+          position: 'absolute',
+          right: 4,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          opacity: hovered ? 1 : 0,
+          transition: 'opacity 0.15s ease-in-out',
+          pointerEvents: hovered ? 'auto' : 'none',
+          display: 'flex',
+          gap: 2,
+          width: 'fit-content',
+        }}
+      >
+        {onSettings && (
+          <Tooltip title="Session settings">
+            <Button
+              type="text"
+              size="small"
+              icon={<SettingOutlined />}
+              onClick={(e) => onSettings(sessionId, e)}
+              style={buttonStyle}
+            />
+          </Tooltip>
+        )}
+        <Tooltip title="Archive session">
+          <Button
+            type="text"
+            size="small"
+            icon={<InboxOutlined />}
+            loading={isArchiving}
+            onClick={(e) => onArchive(sessionId, e)}
+            style={buttonStyle}
+          />
+        </Tooltip>
+      </div>
+    </div>
+  );
+};
 
 interface WorktreeCardProps {
   worktree: Worktree;
@@ -72,6 +144,7 @@ interface WorktreeCardProps {
     }
   ) => void;
   onOpenSettings?: (worktreeId: string) => void;
+  onOpenSessionSettings?: (sessionId: string) => void;
   onOpenTerminal?: (commands: string[], worktreeId?: string) => void;
   onStartEnvironment?: (worktreeId: string) => void;
   onStopEnvironment?: (worktreeId: string) => void;
@@ -100,6 +173,7 @@ const WorktreeCardComponent = ({
   onSpawnSession,
   onArchiveOrDelete,
   onOpenSettings,
+  onOpenSessionSettings,
   onOpenTerminal,
   onStartEnvironment,
   onStopEnvironment,
@@ -149,6 +223,33 @@ const WorktreeCardComponent = ({
       await onSpawnSession?.(forkSpawnModal.session.session_id, config);
     }
   };
+
+  // Session archive via shared hook
+  const { archiveSession } = useSessionActions(client);
+  const [archivingSessionIds, setArchivingSessionIds] = useState<Set<string>>(new Set());
+
+  const handleArchiveSession = useCallback(
+    async (sessionId: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+
+      setArchivingSessionIds((prev) => new Set(prev).add(sessionId));
+      try {
+        const result = await archiveSession(sessionId as SessionID);
+        if (result) {
+          message.success('Session archived');
+        } else {
+          message.error('Failed to archive session');
+        }
+      } finally {
+        setArchivingSessionIds((prev) => {
+          const next = new Set(prev);
+          next.delete(sessionId);
+          return next;
+        });
+      }
+    },
+    [archiveSession]
+  );
 
   // Gateway session helpers (delegating to @agor/core/types)
   const getGatewaySource = useCallback(
@@ -282,57 +383,60 @@ const WorktreeCardComponent = ({
       },
     ];
 
-    return (
-      <div
-        style={{
-          border: session.ready_for_prompt
-            ? `2px solid ${token.colorPrimary}`
-            : `1px solid rgba(255, 255, 255, 0.1)`,
-          borderRadius: 4,
-          padding: 8,
-          background: 'transparent',
-          display: 'flex',
-          alignItems: 'center',
-          cursor: 'pointer',
-          marginBottom: 4,
-          boxShadow: session.ready_for_prompt ? `0 0 12px ${token.colorPrimary}30` : undefined,
-        }}
-        onClick={() => onSessionClick?.(session.session_id)}
-        onContextMenu={(e) => {
-          // Show fork/spawn menu on right-click if handlers exist
-          if (onForkSession || onSpawnSession) {
-            e.preventDefault();
-          }
-        }}
-      >
-        <Space size={4} align="center" style={{ flex: 1, minWidth: 0 }}>
-          <ToolIcon tool={session.agentic_tool} size={20} />
-          {getRelationshipIcon()}
-          <Typography.Text
-            strong
-            style={{
-              fontSize: 12,
-              flex: 1,
-              ...getSessionTitleStyles(2),
-            }}
-          >
-            {getSessionDisplayTitle(session, { includeAgentFallback: true })}
-          </Typography.Text>
-        </Space>
+    const isActive = session.status === 'running' || session.status === 'stopping';
 
-        {/* Status indicator - fixed width to prevent layout shift */}
+    return (
+      <SessionItemWithActions
+        sessionId={session.session_id}
+        isArchiving={archivingSessionIds.has(session.session_id)}
+        onArchive={handleArchiveSession}
+        onSettings={
+          onOpenSessionSettings
+            ? (id, e) => {
+                e.stopPropagation();
+                onOpenSessionSettings(id);
+              }
+            : undefined
+        }
+      >
         <div
           style={{
-            marginLeft: 8,
-            width: 24,
+            border: session.ready_for_prompt
+              ? `2px solid ${token.colorPrimary}`
+              : `1px solid rgba(255, 255, 255, 0.1)`,
+            borderRadius: 4,
+            padding: 8,
+            background: 'transparent',
             display: 'flex',
-            justifyContent: 'center',
             alignItems: 'center',
+            cursor: 'pointer',
+            marginBottom: 4,
+            boxShadow: session.ready_for_prompt ? `0 0 12px ${token.colorPrimary}30` : undefined,
+          }}
+          onClick={() => onSessionClick?.(session.session_id)}
+          onContextMenu={(e) => {
+            // Show fork/spawn menu on right-click if handlers exist
+            if (onForkSession || onSpawnSession) {
+              e.preventDefault();
+            }
           }}
         >
-          <TaskStatusIcon status={session.status} size={16} />
+          <Space size={4} align="center" style={{ flex: 1, minWidth: 0 }}>
+            {isActive ? <Spin size="small" /> : <ToolIcon tool={session.agentic_tool} size={20} />}
+            {getRelationshipIcon()}
+            <Typography.Text
+              strong
+              style={{
+                fontSize: 12,
+                flex: 1,
+                ...getSessionTitleStyles(2),
+              }}
+            >
+              {getSessionDisplayTitle(session, { includeAgentFallback: true })}
+            </Typography.Text>
+          </Space>
         </div>
-      </div>
+      </SessionItemWithActions>
     );
   };
 
@@ -415,48 +519,56 @@ const WorktreeCardComponent = ({
   // Scheduled runs content (flat list, no genealogy tree needed)
   const scheduledRunsContent = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {scheduledSessions.map((session) => (
-        <div
-          key={session.session_id}
-          style={{
-            border: `1px solid rgba(255, 255, 255, 0.1)`,
-            borderRadius: 4,
-            padding: 8,
-            background: 'transparent',
-            display: 'flex',
-            alignItems: 'center',
-            cursor: 'pointer',
-          }}
-          onClick={() => onSessionClick?.(session.session_id)}
-        >
-          <Space size={4} align="center" style={{ flex: 1, minWidth: 0 }}>
-            <ToolIcon tool={session.agentic_tool} size={20} />
-            <Typography.Text
-              style={{
-                fontSize: 12,
-                flex: 1,
-                color: token.colorTextSecondary,
-                ...getSessionTitleStyles(2),
-              }}
-            >
-              {getSessionDisplayTitle(session, { includeAgentFallback: true })}
-            </Typography.Text>
-          </Space>
-
-          {/* Status indicator */}
-          <div
-            style={{
-              marginLeft: 8,
-              width: 24,
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
+      {scheduledSessions.map((session) => {
+        const isActive = session.status === 'running' || session.status === 'stopping';
+        return (
+          <SessionItemWithActions
+            key={session.session_id}
+            sessionId={session.session_id}
+            isArchiving={archivingSessionIds.has(session.session_id)}
+            onArchive={handleArchiveSession}
+            onSettings={
+              onOpenSessionSettings
+                ? (id, e) => {
+                    e.stopPropagation();
+                    onOpenSessionSettings(id);
+                  }
+                : undefined
+            }
           >
-            <TaskStatusIcon status={session.status} size={16} />
-          </div>
-        </div>
-      ))}
+            <div
+              style={{
+                border: `1px solid rgba(255, 255, 255, 0.1)`,
+                borderRadius: 4,
+                padding: 8,
+                background: 'transparent',
+                display: 'flex',
+                alignItems: 'center',
+                cursor: 'pointer',
+              }}
+              onClick={() => onSessionClick?.(session.session_id)}
+            >
+              <Space size={4} align="center" style={{ flex: 1, minWidth: 0 }}>
+                {isActive ? (
+                  <Spin size="small" />
+                ) : (
+                  <ToolIcon tool={session.agentic_tool} size={20} />
+                )}
+                <Typography.Text
+                  style={{
+                    fontSize: 12,
+                    flex: 1,
+                    color: token.colorTextSecondary,
+                    ...getSessionTitleStyles(2),
+                  }}
+                >
+                  {getSessionDisplayTitle(session, { includeAgentFallback: true })}
+                </Typography.Text>
+              </Space>
+            </div>
+          </SessionItemWithActions>
+        );
+      })}
     </div>
   );
 
@@ -490,61 +602,71 @@ const WorktreeCardComponent = ({
         // Extract denormalized gateway metadata (stamped at session creation)
         const gatewaySource = getGatewaySource(session);
 
-        return (
-          <div
-            key={session.session_id}
-            style={{
-              border: `1px solid rgba(255, 255, 255, 0.1)`,
-              borderRadius: 4,
-              padding: 8,
-              background: 'transparent',
-              display: 'flex',
-              alignItems: 'center',
-              cursor: 'pointer',
-            }}
-            onClick={() => onSessionClick?.(session.session_id)}
-          >
-            <Space size={4} align="center" style={{ flex: 1, minWidth: 0 }}>
-              <ToolIcon tool={session.agentic_tool} size={20} />
-              <div
-                style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}
-              >
-                <Typography.Text
-                  style={{
-                    fontSize: 12,
-                    ...getSessionTitleStyles(2),
-                  }}
-                >
-                  {getSessionDisplayTitle(session, { includeAgentFallback: true })}
-                </Typography.Text>
-                <div style={{ alignSelf: 'flex-start' }}>
-                  {gatewaySource ? (
-                    <ChannelPill
-                      channelType={gatewaySource.channel_type}
-                      channelName={gatewaySource.channel_name}
-                    />
-                  ) : (
-                    <Typography.Text type="secondary" style={{ fontSize: 11, fontStyle: 'italic' }}>
-                      (Gateway - metadata unavailable)
-                    </Typography.Text>
-                  )}
-                </div>
-              </div>
-            </Space>
+        const isActive = session.status === 'running' || session.status === 'stopping';
 
-            {/* Status indicator */}
+        return (
+          <SessionItemWithActions
+            key={session.session_id}
+            sessionId={session.session_id}
+            isArchiving={archivingSessionIds.has(session.session_id)}
+            onArchive={handleArchiveSession}
+            onSettings={
+              onOpenSessionSettings
+                ? (id, e) => {
+                    e.stopPropagation();
+                    onOpenSessionSettings(id);
+                  }
+                : undefined
+            }
+          >
             <div
               style={{
-                marginLeft: 8,
-                width: 24,
+                border: `1px solid rgba(255, 255, 255, 0.1)`,
+                borderRadius: 4,
+                padding: 8,
+                background: 'transparent',
                 display: 'flex',
-                justifyContent: 'center',
                 alignItems: 'center',
+                cursor: 'pointer',
               }}
+              onClick={() => onSessionClick?.(session.session_id)}
             >
-              <TaskStatusIcon status={session.status} size={16} />
+              <Space size={4} align="center" style={{ flex: 1, minWidth: 0 }}>
+                {isActive ? (
+                  <Spin size="small" />
+                ) : (
+                  <ToolIcon tool={session.agentic_tool} size={20} />
+                )}
+                <div
+                  style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}
+                >
+                  <Typography.Text
+                    style={{
+                      fontSize: 12,
+                      ...getSessionTitleStyles(2),
+                    }}
+                  >
+                    {getSessionDisplayTitle(session, { includeAgentFallback: true })}
+                  </Typography.Text>
+                  <div style={{ alignSelf: 'flex-start' }}>
+                    {gatewaySource ? (
+                      <ChannelPill
+                        channelType={gatewaySource.channel_type}
+                        channelName={gatewaySource.channel_name}
+                      />
+                    ) : (
+                      <Typography.Text
+                        type="secondary"
+                        style={{ fontSize: 11, fontStyle: 'italic' }}
+                      >
+                        (Gateway - metadata unavailable)
+                      </Typography.Text>
+                    )}
+                  </div>
+                </div>
+              </Space>
             </div>
-          </div>
+          </SessionItemWithActions>
         );
       })}
     </div>
