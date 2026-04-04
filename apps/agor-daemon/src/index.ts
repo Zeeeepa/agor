@@ -894,12 +894,31 @@ async function main() {
       const userId = (params as AuthenticatedParams).user?.user_id as
         | import('@agor/core/types').UserID
         | undefined;
+
+      // Resolve gateway-level env vars (for sessions created via gateway channels)
+      let gatewayEnv: Record<string, string> | undefined;
+      const gatewaySource = (session.custom_context as Record<string, unknown> | undefined)
+        ?.gateway_source as { channel_id?: string } | undefined;
+      if (gatewaySource?.channel_id) {
+        try {
+          const { GatewayChannelRepository } = await import('@agor/core/db');
+          const channelRepo = new GatewayChannelRepository(db);
+          const channel = await channelRepo.findById(gatewaySource.channel_id);
+          if (channel?.agentic_config?.envVars) {
+            gatewayEnv = channel.agentic_config.envVars as Record<string, string>;
+          }
+        } catch {
+          // Non-fatal — gateway env vars are optional
+        }
+      }
+
       // When impersonating, strip HOME/USER/LOGNAME/SHELL so sudo -u can set them
       const executorEnv = await createUserProcessEnvironment(
         userId,
         db,
         undefined,
-        !!executorUnixUser
+        !!executorUnixUser,
+        gatewayEnv
       );
 
       // Validate required user environment variables (if configured)
@@ -1303,10 +1322,16 @@ async function main() {
 
       // Notify the initiating client that OAuth completed successfully
       if (app.io) {
+        const oauthEvent = {
+          state,
+          success: true,
+          mcp_server_id: pendingFlow.mcpServerId,
+          oauth_mode: pendingFlow.oauthMode || 'per_user',
+        };
         if (pendingFlow.socketId) {
-          app.io.to(pendingFlow.socketId).emit('oauth:completed', { state, success: true });
+          app.io.to(pendingFlow.socketId).emit('oauth:completed', oauthEvent);
         } else {
-          app.io.emit('oauth:completed', { state, success: true });
+          app.io.emit('oauth:completed', oauthEvent);
         }
       }
 
@@ -2103,6 +2128,36 @@ async function main() {
 
   app.service('mcp-servers/oauth-disconnect').hooks({
     before: { create: [requireAuth] },
+  });
+
+  // Per-user OAuth auth status: returns which MCP servers the current user has valid tokens for
+  app.use('/mcp-servers/oauth-status', {
+    async find(params?: AuthenticatedParams) {
+      const userId = params?.user?.user_id;
+      if (!userId) {
+        return { authenticated_server_ids: [] };
+      }
+
+      try {
+        const userTokenRepo = new UserMCPOAuthTokenRepository(db);
+        const tokens = await userTokenRepo.listForUser(userId as import('@agor/core/types').UserID);
+        const now = new Date();
+
+        // Return only non-expired token server IDs
+        const authenticatedServerIds = tokens
+          .filter((t) => !t.oauth_token_expires_at || t.oauth_token_expires_at > now)
+          .map((t) => t.mcp_server_id);
+
+        return { authenticated_server_ids: authenticatedServerIds };
+      } catch (error) {
+        console.error('[OAuth Status] Error fetching user tokens:', error);
+        return { authenticated_server_ids: [] };
+      }
+    },
+  });
+
+  app.service('mcp-servers/oauth-status').hooks({
+    before: { find: [requireAuth] },
   });
 
   // Discover/Test MCP server capabilities endpoint

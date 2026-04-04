@@ -38,6 +38,7 @@ interface UseAgorDataResult {
   gatewayChannelById: Map<string, GatewayChannel>; // O(1) lookups by id - efficient, stable references
   artifactById: Map<string, Artifact>; // O(1) lookups by artifact_id - efficient, stable references
   sessionMcpServerIds: Map<string, string[]>; // O(1) lookups by session_id - efficient, stable references
+  userAuthenticatedMcpServerIds: Set<string>; // MCP server IDs where current user has valid per-user OAuth tokens
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -73,6 +74,9 @@ export function useAgorData(
   );
   const [artifactById, setArtifactById] = useState<Map<string, Artifact>>(new Map());
   const [sessionMcpServerIds, setSessionMcpServerIds] = useState<Map<string, string[]>>(new Map());
+  const [userAuthenticatedMcpServerIds, setUserAuthenticatedMcpServerIds] = useState<Set<string>>(
+    new Set()
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,6 +110,7 @@ export function useAgorData(
         sessionMcpResult,
         gatewayChannelsResult,
         artifactsResult,
+        oauthStatusResult,
       ] = await Promise.all([
         client
           .service('sessions')
@@ -122,6 +127,10 @@ export function useAgorData(
         client.service('session-mcp-servers').find({ query: { $limit: PAGINATION.DEFAULT_LIMIT } }),
         client.service('gateway-channels').find({ query: { $limit: PAGINATION.DEFAULT_LIMIT } }),
         client.service('artifacts').find({ query: { $limit: PAGINATION.DEFAULT_LIMIT } }),
+        client
+          .service('mcp-servers/oauth-status')
+          .find()
+          .catch(() => ({ authenticated_server_ids: [] })),
       ]);
 
       // Handle paginated vs array results
@@ -252,6 +261,10 @@ export function useAgorData(
         sessionMcpMap.get(relationship.session_id)!.push(relationship.mcp_server_id);
       }
       setSessionMcpServerIds(sessionMcpMap);
+
+      // Set per-user OAuth auth status
+      const oauthStatus = oauthStatusResult as { authenticated_server_ids?: string[] };
+      setUserAuthenticatedMcpServerIds(new Set(oauthStatus?.authenticated_server_ids ?? []));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
     } finally {
@@ -794,8 +807,32 @@ export function useAgorData(
     commentsService.on('updated', handleCommentPatched);
     commentsService.on('removed', handleCommentRemoved);
 
+    // Listen for OAuth completion events to update per-user token state in real-time.
+    // Only update the per-user set when oauth_mode is 'per_user' (or unset, which defaults
+    // to per_user). Shared-mode completions update the server record itself and don't need
+    // per-user tracking. This also prevents stale data when the event is broadcast globally
+    // (fallback path when socketId is absent).
+    const handleOAuthCompleted = (event: {
+      state: string;
+      success: boolean;
+      mcp_server_id?: string;
+      oauth_mode?: string;
+    }) => {
+      const mode = event.oauth_mode || 'per_user';
+      if (event.success && event.mcp_server_id && mode === 'per_user') {
+        setUserAuthenticatedMcpServerIds((prev) => {
+          if (prev.has(event.mcp_server_id!)) return prev;
+          const next = new Set(prev);
+          next.add(event.mcp_server_id!);
+          return next;
+        });
+      }
+    };
+    client.io.on('oauth:completed', handleOAuthCompleted);
+
     // Cleanup listeners on unmount
     return () => {
+      client.io.off('oauth:completed', handleOAuthCompleted);
       sessionsService.removeListener('created', handleSessionCreated);
       sessionsService.removeListener('patched', handleSessionPatched);
       sessionsService.removeListener('updated', handleSessionPatched);
@@ -876,6 +913,7 @@ export function useAgorData(
     gatewayChannelById,
     artifactById,
     sessionMcpServerIds,
+    userAuthenticatedMcpServerIds,
     loading,
     error,
     refetch: fetchData,

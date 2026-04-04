@@ -19,7 +19,7 @@ import {
   SettingOutlined,
   StopOutlined,
 } from '@ant-design/icons';
-import { App, Badge, Button, Space, Spin, Tooltip, Typography, theme } from 'antd';
+import { Alert, App, Badge, Button, Space, Spin, Tooltip, Typography, theme } from 'antd';
 import Handlebars from 'handlebars';
 import React from 'react';
 import { getDaemonUrl } from '../../config/daemon';
@@ -29,10 +29,12 @@ import { useConnectionDisabled } from '../../contexts/ConnectionContext';
 import { useTasks } from '../../hooks/useTasks';
 import spawnSubsessionTemplate from '../../templates/spawn_subsession.hbs?raw';
 import { getContextWindowGradient } from '../../utils/contextWindow';
+import { mcpServerNeedsAuth } from '../../utils/mcpAuth';
 import { getSessionDisplayTitle, getSessionTitleStyles } from '../../utils/sessionTitle';
 import { compileTemplate } from '../../utils/templates';
 import { AutocompleteTextarea } from '../AutocompleteTextarea';
 import { FileUpload, FileUploadButton } from '../FileUpload';
+import { MCPServerPill } from '../MCPServerPill';
 import { CreatedByTag } from '../metadata';
 import { PermissionModeSelector } from '../PermissionModeSelector';
 import {
@@ -102,7 +104,7 @@ const SessionPanel: React.FC<SessionPanelProps> = ({
   const connectionDisabled = useConnectionDisabled();
 
   // Get data from context
-  const { userById } = useAppData();
+  const { userById, mcpServerById, userAuthenticatedMcpServerIds } = useAppData();
 
   // Get actions from context
   const {
@@ -113,6 +115,14 @@ const SessionPanel: React.FC<SessionPanelProps> = ({
     onDeleteSession: onDelete,
     onOpenTerminal,
   } = useAppActions();
+
+  // Compute which session MCP servers need authentication
+  const unauthedMcpServers = React.useMemo(() => {
+    return sessionMcpServerIds
+      .map((id) => mcpServerById.get(id))
+      .filter((server) => mcpServerNeedsAuth(server, userAuthenticatedMcpServerIds))
+      .map((server) => server!);
+  }, [sessionMcpServerIds, mcpServerById, userAuthenticatedMcpServerIds]);
 
   // Per-session draft storage (localStorage-backed to survive unmounts)
   const DRAFT_KEY_PREFIX = 'agor-draft-';
@@ -581,6 +591,27 @@ const SessionPanel: React.FC<SessionPanelProps> = ({
         style={{ width: '100%', position: 'relative', zIndex: 1 }}
         size={8}
       >
+        {unauthedMcpServers.length > 0 && (
+          <Alert
+            type="warning"
+            showIcon
+            message={
+              <span>
+                {unauthedMcpServers.map((server) => (
+                  <MCPServerPill
+                    key={server.mcp_server_id}
+                    server={server}
+                    needsAuth
+                    client={client}
+                  />
+                ))}{' '}
+                not authenticated — click to sign in.
+              </span>
+            }
+            style={{ marginBottom: 0 }}
+            banner
+          />
+        )}
         <AutocompleteTextarea
           value={inputValue}
           onChange={setInputValue}

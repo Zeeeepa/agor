@@ -9,7 +9,9 @@
 import {
   type Database,
   GatewayChannelRepository,
+  MCPServerRepository,
   ThreadSessionMapRepository,
+  UserMCPOAuthTokenRepository,
   UsersRepository,
 } from '@agor/core/db';
 import type { Application } from '@agor/core/feathers';
@@ -19,9 +21,12 @@ import type {
   AgenticToolName,
   ChannelType,
   GatewayChannel,
+  MCPServerID,
   MessageSource,
   Session,
+  SessionID,
   User,
+  UserID,
 } from '@agor/core/types';
 import { getDefaultPermissionMode, SessionStatus } from '@agor/core/types';
 
@@ -134,6 +139,9 @@ export class GatewayService {
   private channelRepo: GatewayChannelRepository;
   private threadMapRepo: ThreadSessionMapRepository;
   private usersRepo: UsersRepository;
+
+  private mcpServerRepo: MCPServerRepository;
+  private userTokenRepo: UserMCPOAuthTokenRepository;
   private app: Application;
 
   /** Active Socket Mode listeners keyed by channel ID */
@@ -160,6 +168,9 @@ export class GatewayService {
     this.channelRepo = new GatewayChannelRepository(db);
     this.threadMapRepo = new ThreadSessionMapRepository(db);
     this.usersRepo = new UsersRepository(db);
+
+    this.mcpServerRepo = new MCPServerRepository(db);
+    this.userTokenRepo = new UserMCPOAuthTokenRepository(db);
     this.app = app;
   }
 
@@ -426,6 +437,7 @@ export class GatewayService {
 
     let sessionId: string;
     let created = false;
+    let mcpAuthWarning: string | undefined;
 
     // Resolve agentic config: channel config > user defaults > system defaults
     const agenticConfig = channel.agentic_config;
@@ -462,8 +474,9 @@ export class GatewayService {
       );
     } else {
       // New thread → create session via FeathersJS service
-      const sessionsService = this.app.service('sessions') as {
+      const sessionsService = this.app.service('sessions') as unknown as {
         create: (data: Partial<Session>) => Promise<Session>;
+        setMCPServers: (sessionId: SessionID, serverIds: string[], label: string) => Promise<void>;
       };
 
       this.sendDebugMessage(
@@ -526,6 +539,48 @@ export class GatewayService {
 
       sessionId = session.session_id;
       created = true;
+
+      // Attach MCP servers from channel agentic config (reuses sessions service logic)
+      const mcpServerIds = agenticConfig?.mcpServerIds;
+      if (mcpServerIds && mcpServerIds.length > 0) {
+        await sessionsService.setMCPServers(
+          session.session_id as SessionID,
+          mcpServerIds,
+          'gateway'
+        );
+
+        // Check which MCP servers are not authenticated for this user
+        const unauthedMcpNames: string[] = [];
+        for (const serverId of mcpServerIds) {
+          try {
+            const server = await this.mcpServerRepo.findById(serverId);
+            if (server?.auth?.type === 'oauth') {
+              const oauthMode = server.auth.oauth_mode || 'per_user';
+              let hasToken = false;
+              if (oauthMode === 'shared') {
+                hasToken = !!server.auth.oauth_access_token;
+              } else {
+                const validToken = await this.userTokenRepo.getValidToken(
+                  user.user_id as UserID,
+                  serverId as MCPServerID
+                );
+                hasToken = !!validToken;
+              }
+              if (!hasToken) {
+                unauthedMcpNames.push(server.display_name || server.name);
+              }
+            }
+          } catch {
+            // Non-fatal — skip auth check for this server
+          }
+        }
+
+        // Track unauthed MCP names so the warning can be prepended to the initial prompt
+        if (unauthedMcpNames.length > 0) {
+          mcpAuthWarning = `[System notice: The following MCP servers are not authenticated for this user and will be unavailable: ${unauthedMcpNames.join(', ')}. The agent will not have access to these tools.]`;
+          console.log(`[gateway] MCP auth warning for: ${unauthedMcpNames.join(', ')}`);
+        }
+      }
 
       // Create thread → session mapping
       await this.threadMapRepo.create({
@@ -596,6 +651,11 @@ export class GatewayService {
       let promptText = data.text;
       if (created && channel.channel_type === 'github') {
         promptText = buildGitHubInitialPrompt(data.thread_id, data.text, data.metadata);
+      }
+
+      // Prepend MCP auth warning to the initial prompt so the agent is aware
+      if (created && mcpAuthWarning) {
+        promptText = `${mcpAuthWarning}\n\n${promptText}`;
       }
 
       // Internal call: pass user, omit provider to bypass auth hooks

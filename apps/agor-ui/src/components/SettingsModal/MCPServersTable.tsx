@@ -85,13 +85,17 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
   const [oauthBrowserFlowAvailable, setOauthBrowserFlowAvailable] = useState(false);
   const [startingOAuthFlow, setStartingOAuthFlow] = useState(false);
 
-  // Two-phase OAuth flow state
+  // OAuth flow state
   const [oauthCallbackModalVisible, setOauthCallbackModalVisible] = useState(false);
-  const [oauthCallbackUrl, setOauthCallbackUrl] = useState('');
-  const [_oauthState, setOauthState] = useState<string | null>(null);
-  const [completingOAuth, setCompletingOAuth] = useState(false);
   const [disconnectingOAuth, setDisconnectingOAuth] = useState(false);
   const oauthCompletedCleanupRef = useRef<(() => void) | null>(null);
+
+  // Clean up OAuth listener on unmount
+  useEffect(() => {
+    return () => {
+      oauthCompletedCleanupRef.current?.();
+    };
+  }, []);
 
   // Track effective server ID (may differ from prop after onSaveFirst creates a new server)
   const [effectiveServerId, setEffectiveServerId] = useState<string | undefined>(serverId);
@@ -154,11 +158,8 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
       };
 
       if (data.success && data.state) {
-        // Store the state for completing the flow
-        setOauthState(data.state);
-        setOauthCallbackUrl('');
         setOauthCallbackModalVisible(true);
-        showInfo('Browser opened. Complete authentication in the new tab.');
+        showInfo('Authenticating... complete sign-in in the new tab.');
 
         // Listen for automatic completion via the daemon's callback endpoint
         const handleOAuthCompleted = (event: { state: string; success: boolean }) => {
@@ -166,8 +167,6 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
             showSuccess('OAuth authentication successful!');
             setOauthCallbackModalVisible(false);
             setOauthBrowserFlowAvailable(false);
-            setOauthState(null);
-            setOauthCallbackUrl('');
             cleanup();
           }
         };
@@ -187,39 +186,6 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
     } finally {
       client.io.off('oauth:open_browser', handleOpenBrowser);
       setStartingOAuthFlow(false);
-    }
-  };
-
-  // Complete OAuth flow with callback URL
-  const handleCompleteOAuthFlow = async () => {
-    if (!client || !oauthCallbackUrl.trim()) {
-      showError('Please paste the callback URL');
-      return;
-    }
-
-    setCompletingOAuth(true);
-    try {
-      const data = (await client.service('mcp-servers/oauth-complete').create({
-        callback_url: oauthCallbackUrl.trim(),
-      })) as {
-        success: boolean;
-        error?: string;
-        message?: string;
-      };
-
-      if (data.success) {
-        showSuccess(data.message || 'OAuth authentication successful!');
-        setOauthCallbackModalVisible(false);
-        setOauthBrowserFlowAvailable(false);
-        setOauthState(null);
-        setOauthCallbackUrl('');
-      } else {
-        showError(data.error || 'Failed to complete OAuth flow');
-      }
-    } catch (error) {
-      showError(`OAuth error: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setCompletingOAuth(false);
     }
   };
 
@@ -882,14 +848,12 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
         items={collapseItems}
       />
 
-      {/* OAuth Callback URL Modal - for two-phase OAuth flow */}
+      {/* OAuth waiting modal - closes automatically when daemon receives the callback */}
       <Modal
-        title="Complete OAuth Authentication"
+        title="OAuth Authentication"
         open={oauthCallbackModalVisible}
         onCancel={() => {
           setOauthCallbackModalVisible(false);
-          setOauthState(null);
-          setOauthCallbackUrl('');
           oauthCompletedCleanupRef.current?.();
         }}
         footer={[
@@ -897,45 +861,20 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
             key="cancel"
             onClick={() => {
               setOauthCallbackModalVisible(false);
-              setOauthState(null);
-              setOauthCallbackUrl('');
               oauthCompletedCleanupRef.current?.();
             }}
           >
             Cancel
           </Button>,
-          <Button
-            key="complete"
-            type="primary"
-            onClick={handleCompleteOAuthFlow}
-            loading={completingOAuth}
-            disabled={!oauthCallbackUrl.trim()}
-          >
-            Complete Authentication
-          </Button>,
         ]}
       >
         <Space orientation="vertical" style={{ width: '100%' }}>
           <Typography.Paragraph>
-            After signing in to the OAuth provider, you will be redirected to a page that may show
-            an error (like "This site can't be reached"). This is expected.
+            Waiting for authentication to complete in the browser tab...
           </Typography.Paragraph>
-
-          <Typography.Paragraph strong>
-            Copy the entire URL from your browser's address bar and paste it below:
+          <Typography.Paragraph>
+            This dialog will close automatically once sign-in is complete.
           </Typography.Paragraph>
-
-          <Input.TextArea
-            placeholder="http://127.0.0.1:xxxxx/oauth/callback?code=...&state=..."
-            value={oauthCallbackUrl}
-            onChange={(e) => setOauthCallbackUrl(e.target.value)}
-            rows={3}
-            style={{ fontFamily: 'monospace', fontSize: 12 }}
-          />
-
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            The URL should contain "code=" and "state=" parameters.
-          </Typography.Text>
         </Space>
       </Modal>
     </>
