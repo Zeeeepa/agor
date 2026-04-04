@@ -1,7 +1,6 @@
 import { WorktreeRepository } from '@agor/core/db';
 import type {
   AgenticToolName,
-  BoardEntityObject,
   BoardID,
   UUID,
   Worktree,
@@ -9,6 +8,7 @@ import type {
   ZoneBoardObject,
 } from '@agor/core/types';
 import { getAssistantConfig, isAssistant } from '@agor/core/types';
+import { computeZoneRelativePosition } from '@agor/core/utils/board-placement';
 import { normalizeOptionalHttpUrl } from '@agor/core/utils/url';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
@@ -19,37 +19,6 @@ import { coerceString, textResult } from '../server.js';
 
 const WORKTREE_NAME_PATTERN = /^[a-z0-9-]+$/;
 const GIT_SHA_PATTERN = /^[0-9a-f]{40}$/i;
-
-/** Shared constants for worktree card dimensions used in zone placement */
-const WORKTREE_CARD_WIDTH = 500;
-const WORKTREE_CARD_HEIGHT = 200;
-const ZONE_DESIRED_PADDING = 80;
-
-/**
- * Calculate a random position within a zone for placing a worktree card.
- * Returns a position relative to the zone origin (not absolute canvas coordinates).
- * Uses adaptive padding and jitter to prevent cards from stacking on top of each other.
- */
-function computeZoneRelativePosition(zone: ZoneBoardObject): { x: number; y: number } {
-  const maxPaddingX = Math.max(0, (zone.width - WORKTREE_CARD_WIDTH) / 2);
-  const maxPaddingY = Math.max(0, (zone.height - WORKTREE_CARD_HEIGHT) / 2);
-  const paddingX = Math.min(ZONE_DESIRED_PADDING, maxPaddingX);
-  const paddingY = Math.min(ZONE_DESIRED_PADDING, maxPaddingY);
-
-  const jitterRangeX = Math.max(0, zone.width - WORKTREE_CARD_WIDTH - 2 * paddingX);
-  const jitterRangeY = Math.max(0, zone.height - WORKTREE_CARD_HEIGHT - 2 * paddingY);
-
-  if (zone.width < WORKTREE_CARD_WIDTH || zone.height < WORKTREE_CARD_HEIGHT) {
-    console.warn(
-      `⚠️  Zone is smaller than worktree card (${zone.width}x${zone.height} < ${WORKTREE_CARD_WIDTH}x${WORKTREE_CARD_HEIGHT}), card may overflow zone bounds`
-    );
-  }
-
-  return {
-    x: paddingX + Math.random() * jitterRangeX,
-    y: paddingY + Math.random() * jitterRangeY,
-  };
-}
 
 export function registerWorktreeTools(server: McpServer, ctx: McpContext): void {
   // Tool 1: agor_worktrees_get
@@ -262,54 +231,8 @@ export function registerWorktreeTools(server: McpServer, ctx: McpContext): void 
         ref = worktreeName;
       }
 
-      // If zoneId provided, validate zone exists and compute position
-      let zonePosition: { x: number; y: number } | undefined;
-      let resolvedZoneId: string | undefined;
-      if (zoneId && boardId) {
-        const board = await ctx.app.service('boards').get(boardId, ctx.baseServiceParams);
-        const zone = board.objects?.[zoneId];
-        if (!zone || zone.type !== 'zone') {
-          throw new Error(`Zone ${zoneId} not found on board ${boardId}`);
-        }
-
-        zonePosition = computeZoneRelativePosition(zone as ZoneBoardObject);
-        resolvedZoneId = zoneId;
-      }
-
-      // If no zoneId and no explicit position, compute smart default from existing worktrees
-      let smartPosition: { x: number; y: number } | undefined;
-      if (!zoneId && boardId) {
-        try {
-          const boardObjectsResult = await ctx.app
-            .service('board-objects')
-            .find({ query: { board_id: boardId }, ...ctx.baseServiceParams });
-          const existingObjects = (boardObjectsResult as { data: BoardEntityObject[] }).data;
-
-          // Only use absolute-positioned worktrees for centroid (skip zoned entries
-          // whose positions are relative to zone origin, not absolute canvas coords)
-          const absoluteWorktrees = existingObjects.filter(
-            (obj) => obj.entity_type === 'worktree' && !obj.zone_id
-          );
-
-          if (absoluteWorktrees.length > 0) {
-            const sumX = absoluteWorktrees.reduce((sum, obj) => sum + obj.position.x, 0);
-            const sumY = absoluteWorktrees.reduce((sum, obj) => sum + obj.position.y, 0);
-            const centroidX = sumX / absoluteWorktrees.length;
-            const centroidY = sumY / absoluteWorktrees.length;
-
-            // Add random offset to avoid overlap (±150px)
-            const offsetX = (Math.random() - 0.5) * 300;
-            const offsetY = (Math.random() - 0.5) * 300;
-
-            smartPosition = {
-              x: centroidX + offsetX,
-              y: centroidY + offsetY,
-            };
-          }
-        } catch {
-          // Fall through to default positioning in repos service
-        }
-      }
+      // Positioning is handled automatically by the repos service —
+      // agents don't need to think about x/y coordinates.
 
       const worktree = await reposService.createWorktree(
         repoId,
@@ -323,9 +246,7 @@ export function registerWorktreeTools(server: McpServer, ctx: McpContext): void 
           ...(issueUrl ? { issue_url: issueUrl } : {}),
           ...(pullRequestUrl ? { pull_request_url: pullRequestUrl } : {}),
           ...(boardId ? { boardId } : {}),
-          ...(zonePosition ? { position: zonePosition } : {}),
-          ...(smartPosition ? { position: smartPosition } : {}),
-          ...(resolvedZoneId ? { zoneId: resolvedZoneId } : {}),
+          ...(zoneId ? { zoneId } : {}),
         },
         ctx.baseServiceParams
       );
@@ -337,8 +258,8 @@ export function registerWorktreeTools(server: McpServer, ctx: McpContext): void 
         response._note = `Name '${originalName}' was already taken. Created as '${worktreeName}' instead (autoSuffix applied).`;
       }
 
-      if (resolvedZoneId) {
-        response._zone = { zone_id: resolvedZoneId, position: zonePosition };
+      if (zoneId) {
+        response._zone = { zone_id: zoneId };
       } else {
         response.hint =
           'Use agor_worktrees_set_zone to pin this worktree to a specific zone and optionally trigger zone prompt templates.';

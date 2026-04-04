@@ -341,7 +341,6 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
       issue_url?: string;
       pull_request_url?: string;
       boardId?: string;
-      position?: { x: number; y: number };
       zoneId?: string;
     },
     params?: RepoParams
@@ -444,8 +443,9 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
     }
 
     // Validate boardId exists before creating DB record (FK constraint would reject it)
+    // Board is stored for later use in smart positioning
+    let board: { objects?: Record<string, { type?: string }> } | undefined;
     if (data.boardId) {
-      let board: { objects?: Record<string, { type?: string }> } | undefined;
       try {
         board = await this.app.service('boards').get(data.boardId, params);
       } catch {
@@ -546,20 +546,90 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
     if (data.boardId) {
       const boardObjectsService = this.app.service('board-objects');
 
-      // Fallback position: stagger by unique_id if viewport center not provided
-      const fallbackPosition = {
-        x: 100 + (worktreeUniqueId - 1) * 60,
-        y: 100 + (worktreeUniqueId - 1) * 60,
-      };
+      // Compute position automatically — agents should never need to think about x/y
+      let position: { x: number; y: number } | undefined;
+      const resolvedZoneId = data.zoneId;
 
-      const finalPosition = data.position || fallbackPosition;
+      try {
+        // If placing in a zone, compute zone-relative position
+        if (resolvedZoneId && board) {
+          const zone = board.objects?.[resolvedZoneId];
+          if (zone?.type === 'zone') {
+            const { computeZoneRelativePosition } = await import(
+              '@agor/core/utils/board-placement'
+            );
+            position = computeZoneRelativePosition(
+              zone as import('@agor/core/types').ZoneBoardObject
+            );
+          }
+        }
+
+        // If not in a zone, anchor near existing content on the board
+        if (!position) {
+          const existingResult = await boardObjectsService.find({
+            query: { board_id: data.boardId },
+            ...params,
+          });
+          const existing = (
+            existingResult as {
+              data: import('@agor/core/types').BoardEntityObject[];
+            }
+          ).data;
+
+          // Strategy 1: centroid of absolute-positioned worktrees
+          const absolute = existing.filter(
+            (obj: import('@agor/core/types').BoardEntityObject) =>
+              obj.entity_type === 'worktree' && !obj.zone_id
+          );
+          if (absolute.length > 0) {
+            const cx = absolute.reduce((s, o) => s + o.position.x, 0) / absolute.length;
+            const cy = absolute.reduce((s, o) => s + o.position.y, 0) / absolute.length;
+            position = {
+              x: cx + (Math.random() - 0.5) * 300,
+              y: cy + (Math.random() - 0.5) * 300,
+            };
+          }
+
+          // Strategy 2: below the lowest zone
+          if (!position && board?.objects) {
+            const zones = Object.values(board.objects).filter(
+              (o: unknown) => (o as { type: string }).type === 'zone'
+            ) as import('@agor/core/types').ZoneBoardObject[];
+            if (zones.length > 0) {
+              let maxBottom = 0;
+              let anchorX = 0;
+              for (const z of zones) {
+                const bottom = z.y + z.height;
+                if (bottom > maxBottom) {
+                  maxBottom = bottom;
+                  anchorX = z.x;
+                }
+              }
+              position = {
+                x: anchorX + (Math.random() - 0.5) * 200,
+                y: maxBottom + 80 + Math.random() * 100,
+              };
+            }
+          }
+        }
+      } catch (error) {
+        console.warn(
+          '⚠️  Smart positioning failed, using fallback:',
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+
+      // Final fallback: near origin
+      if (!position) {
+        position = { x: 100 + Math.random() * 200, y: 100 + Math.random() * 200 };
+      }
 
       await boardObjectsService.create(
         {
           board_id: data.boardId,
           worktree_id: worktree.worktree_id,
-          position: finalPosition,
-          ...(data.zoneId ? { zone_id: data.zoneId } : {}),
+          position,
+          ...(resolvedZoneId ? { zone_id: resolvedZoneId } : {}),
         },
         params
       );
