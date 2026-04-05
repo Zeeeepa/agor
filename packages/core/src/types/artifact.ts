@@ -71,6 +71,8 @@ export interface SandpackManifest {
   dependencies?: Record<string, string>;
   /** Entry file path */
   entry?: string;
+  /** Custom Sandpack bundler URL (self-hosted). If omitted, auto-detected or CodeSandbox default. */
+  bundlerURL?: string;
 }
 
 /**
@@ -89,6 +91,8 @@ export interface ArtifactPayload {
   content_hash: string;
   /** Env vars referenced in agor.config.js that the requesting user hasn't configured */
   missing_env_vars?: string[];
+  /** Custom Sandpack bundler URL. Set when self-hosted bundler is available or specified in manifest. */
+  bundlerURL?: string;
 }
 
 /**

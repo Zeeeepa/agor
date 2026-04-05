@@ -9,6 +9,7 @@
 #   ./build.sh --bump minor       # Bump to next minor version
 #   ./build.sh --dry-run          # Show what would be published without actually publishing
 #   ./build.sh --skip-install     # Skip pnpm install step
+#   ./build.sh --with-sandpack    # Include self-hosted Sandpack bundler in build
 
 set -e  # Exit on error
 
@@ -17,6 +18,7 @@ set -e  # Exit on error
 PUBLISH=false
 DRY_RUN=false
 SKIP_INSTALL=false
+WITH_SANDPACK=false
 BUMP=""
 
 while [[ $# -gt 0 ]]; do
@@ -25,6 +27,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run)   DRY_RUN=true; PUBLISH=true; shift ;;
     --bump)      BUMP="$2"; PUBLISH=true; shift 2 ;;
     --skip-install) SKIP_INSTALL=true; shift ;;
+    --with-sandpack) WITH_SANDPACK=true; shift ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
@@ -150,6 +153,24 @@ echo "📦 Building @agor-live/client..."
 cd "$CLIENT_DIR"
 pnpm build
 
+# ── Build self-hosted Sandpack bundler (optional) ────────────────────────────
+
+if [[ "$WITH_SANDPACK" == true ]]; then
+  echo ""
+  echo "🧩 Building self-hosted Sandpack bundler..."
+  SANDPACK_DIR="$REPO_ROOT/.sandpack-bundler"
+  if [[ ! -d "$SANDPACK_DIR" ]]; then
+    echo "  → Cloning sandpack-bundler..."
+    git clone --depth 1 https://github.com/codesandbox/sandpack-bundler.git "$SANDPACK_DIR"
+  fi
+  cd "$SANDPACK_DIR"
+  echo "  → Installing dependencies..."
+  yarn install --frozen-lockfile 2>/dev/null || yarn install
+  echo "  → Building..."
+  yarn build
+  echo "  ✓ Sandpack bundler built"
+fi
+
 # ── Copy artifacts to agor-live ──────────────────────────────────────────────
 
 echo ""
@@ -188,6 +209,20 @@ echo "  → Copying UI..."
 mkdir -p "$SCRIPT_DIR/dist/ui"
 cp -r "$REPO_ROOT/apps/agor-ui/dist/"* "$SCRIPT_DIR/dist/ui/"
 
+if [[ "$WITH_SANDPACK" == true ]]; then
+  # sandpack-bundler outputs to www/ or dist/ depending on version
+  SANDPACK_OUT=""
+  if [[ -d "$SANDPACK_DIR/www" ]]; then SANDPACK_OUT="$SANDPACK_DIR/www"; fi
+  if [[ -d "$SANDPACK_DIR/dist" ]]; then SANDPACK_OUT="$SANDPACK_DIR/dist"; fi
+  if [[ -n "$SANDPACK_OUT" ]]; then
+    echo "  → Copying Sandpack bundler..."
+    mkdir -p "$SCRIPT_DIR/dist/static/sandpack"
+    cp -r "$SANDPACK_OUT/"* "$SCRIPT_DIR/dist/static/sandpack/"
+  else
+    echo "  ⚠️  Sandpack bundler build output not found, skipping"
+  fi
+fi
+
 echo ""
 echo "📦 Setting up @agor/core symlink for local development..."
 mkdir -p "$SCRIPT_DIR/node_modules/@agor"
@@ -204,6 +239,9 @@ du -sh "$SCRIPT_DIR/dist/cli" | awk '{print "    CLI:      " $1}'
 du -sh "$SCRIPT_DIR/dist/daemon" | awk '{print "    Daemon:   " $1}'
 du -sh "$SCRIPT_DIR/dist/executor" | awk '{print "    Executor: " $1}'
 du -sh "$SCRIPT_DIR/dist/ui" | awk '{print "    UI:       " $1}'
+if [[ -d "$SCRIPT_DIR/dist/static/sandpack" ]]; then
+  du -sh "$SCRIPT_DIR/dist/static/sandpack" | awk '{print "    Sandpack: " $1}'
+fi
 du -sh "$CLIENT_DIR/dist" | awk '{print "  @agor-live/client: " $1}'
 
 echo ""

@@ -364,6 +364,7 @@ export const ArtifactNode = ({
             options={{
               initMode: 'user-visible',
               ...(payload.entry ? { activeFile: payload.entry } : {}),
+              ...(payload.bundlerURL ? { bundlerURL: payload.bundlerURL } : {}),
             }}
           >
             <SandpackPreview

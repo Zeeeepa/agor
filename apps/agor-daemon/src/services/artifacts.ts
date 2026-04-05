@@ -96,6 +96,9 @@ export class ArtifactsService extends DrizzleService<Artifact, Partial<Artifact>
   /** In-memory ring buffer for console logs per artifact */
   private consoleLogs: Map<string, ArtifactConsoleEntry[]> = new Map();
 
+  /** URL of self-hosted Sandpack bundler (detected at startup, null if not available) */
+  selfHostedBundlerURL: string | null = null;
+
   constructor(db: Database, app: Application) {
     const artifactRepo = new ArtifactRepository(db);
     super(artifactRepo, {
@@ -287,6 +290,12 @@ export class ArtifactsService extends DrizzleService<Artifact, Partial<Artifact>
       }
     }
 
+    // Resolve bundlerURL: manifest override > self-hosted detection > omit (CodeSandbox default)
+    let bundlerURL = manifest.bundlerURL;
+    if (!bundlerURL && this.selfHostedBundlerURL) {
+      bundlerURL = this.selfHostedBundlerURL;
+    }
+
     return {
       artifact_id: artifact.artifact_id,
       name: artifact.name,
@@ -297,6 +306,7 @@ export class ArtifactsService extends DrizzleService<Artifact, Partial<Artifact>
       entry: manifest.entry,
       content_hash: contentHash,
       ...(missingEnvVars ? { missing_env_vars: missingEnvVars } : {}),
+      ...(bundlerURL ? { bundlerURL } : {}),
     };
   }
 

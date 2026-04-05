@@ -692,6 +692,21 @@ async function main() {
     }
   }
 
+  // Serve static assets (e.g., self-hosted Sandpack bundler) if available.
+  // Static directory lives at dist/static/ in production (agor-live) or static/ in dev.
+  {
+    const pathMod = await import('node:path');
+    const { fileURLToPath: toPath } = await import('node:url');
+    const { existsSync: exists } = await import('node:fs');
+    const dir =
+      typeof __dirname !== 'undefined' ? __dirname : pathMod.dirname(toPath(import.meta.url));
+    const staticPath = pathMod.resolve(dir, '../static');
+    if (exists(staticPath)) {
+      console.log(`📂 Serving static assets from: ${staticPath}`);
+      app.use('/static', express.static(staticPath) as never);
+    }
+  }
+
   // OAuth callback handler - registered BEFORE rest() and compression so it
   // short-circuits before FeathersJS's service router can intercept the request.
   // The actual handler is set later once db/pendingOAuthFlows are available.
@@ -1215,6 +1230,23 @@ async function main() {
 
   // Register artifacts service (live Sandpack web apps on boards)
   app.use('/artifacts', createArtifactsService(db, app));
+
+  // Detect self-hosted Sandpack bundler and configure artifact service
+  {
+    const pathMod = await import('node:path');
+    const { fileURLToPath: toPath } = await import('node:url');
+    const { existsSync: exists } = await import('node:fs');
+    const dir =
+      typeof __dirname !== 'undefined' ? __dirname : pathMod.dirname(toPath(import.meta.url));
+    const sandpackPath = pathMod.resolve(dir, '../static/sandpack');
+    if (exists(sandpackPath)) {
+      const baseUrl = await getBaseUrl();
+      const bundlerURL = `${baseUrl}/static/sandpack/`;
+      const artifactsService = app.service('artifacts') as unknown as ArtifactsService;
+      artifactsService.selfHostedBundlerURL = bundlerURL;
+      console.log(`🧩 Self-hosted Sandpack bundler detected: ${bundlerURL}`);
+    }
+  }
 
   // Register board-comments service (human-to-human conversations)
   app.use('/board-comments', createBoardCommentsService(db));
