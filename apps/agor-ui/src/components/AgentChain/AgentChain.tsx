@@ -7,13 +7,13 @@
  *
  * Displays as:
  * - Collapsed (default): Summary with thought icon, counts, and stats
- * - Expanded: ThoughtChain showing sequential thoughts and tool uses
+ * - Expanded: ToolBlock items showing sequential thoughts and tool uses
  *
  * Note: Regular assistant responses (text meant for user) are shown
  * as green message bubbles, NOT in AgentChain.
  */
 
-import type { ContentBlock as CoreContentBlock, Message } from '@agor/core/types';
+import type { ContentBlock as CoreContentBlock, DiffEnrichment, Message } from '@agor/core/types';
 import {
   BranchesOutlined,
   BulbOutlined,
@@ -35,15 +35,13 @@ import {
   ThunderboltOutlined,
   ToolOutlined,
 } from '@ant-design/icons';
-import type { ThoughtChainProps } from '@ant-design/x';
-import { ThoughtChain } from '@ant-design/x';
-import { Popover, Space, Spin, Tooltip, Typography, theme } from 'antd';
+import { Popover, Space, Spin, Typography, theme } from 'antd';
 import React, { useMemo, useState } from 'react';
 import { copyToClipboard } from '../../utils/clipboard';
 import { getToolDisplayName } from '../../utils/toolDisplayName';
 import { CollapsibleText } from '../CollapsibleText';
-import { CopyableContent } from '../CopyableContent';
 import { Tag } from '../Tag';
+import { ToolBlock } from '../ToolBlock';
 import { ToolUseRenderer } from '../ToolUseRenderer';
 
 interface ToolUseBlock {
@@ -58,6 +56,7 @@ interface ToolResultBlock {
   tool_use_id: string;
   content: string | CoreContentBlock[];
   is_error?: boolean;
+  diff?: DiffEnrichment;
 }
 
 interface TextBlock {
@@ -110,6 +109,9 @@ function getToolIcon(toolName: string): React.ReactElement {
     case 'Skill':
     case 'SlashCommand':
       return <ThunderboltOutlined {...iconProps} />;
+    // Codex tools
+    case 'edit_files':
+      return <EditOutlined {...iconProps} />;
     // MCP tools
     case 'ListMcpResourcesTool':
     case 'ReadMcpResourceTool':
@@ -120,9 +122,12 @@ function getToolIcon(toolName: string): React.ReactElement {
   }
 }
 
+/** Tools whose content is always shown (not collapsible) */
+const ALWAYS_EXPANDED_TOOLS = new Set(['Edit', 'Write', 'edit', 'write', 'edit_files']);
+
 export const AgentChain = React.memo<AgentChainProps>(({ messages }) => {
   const { token } = theme.useToken();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
 
   // Extract chain items (thoughts and tools) from messages
   const chainItems = useMemo(() => {
@@ -312,6 +317,7 @@ export const AgentChain = React.memo<AgentChainProps>(({ messages }) => {
       case 'Read':
       case 'Write':
       case 'Edit':
+      case 'NotebookEdit':
         if (input.file_path) {
           const path = String(input.file_path);
           return path
@@ -326,6 +332,54 @@ export const AgentChain = React.memo<AgentChainProps>(({ messages }) => {
       case 'Glob':
         return input.pattern ? `Find files: ${input.pattern}` : null;
 
+      case 'ToolSearch':
+        return input.query ? String(input.query) : null;
+
+      case 'WebSearch':
+        return input.query ? String(input.query) : null;
+
+      case 'WebFetch':
+        return input.url ? String(input.url) : null;
+
+      case 'Agent':
+        return input.description ? String(input.description) : null;
+
+      case 'Skill':
+      case 'SlashCommand':
+        return input.skill ? String(input.skill) : input.name ? String(input.name) : null;
+
+      case 'Task':
+        if (input.prompt) {
+          const firstLine = String(input.prompt).trim().split('\n')[0];
+          return firstLine.length > 100 ? `${firstLine.slice(0, 100)}…` : firstLine;
+        }
+        return null;
+
+      case 'TodoWrite': {
+        const todos = Array.isArray(input.todos) ? input.todos : [];
+        if (todos.length === 0) return null;
+        const done = todos.filter((t: { status?: string }) => t.status === 'completed').length;
+        const inProg = todos.filter((t: { status?: string }) => t.status === 'in_progress').length;
+        const parts = [`${done}/${todos.length} done`];
+        if (inProg > 0) parts.push(`${inProg} in progress`);
+        return parts.join(', ');
+      }
+
+      case 'edit_files': {
+        const changes = Array.isArray(input.changes) ? input.changes : [];
+        if (changes.length === 0) return null;
+        if (changes.length === 1) {
+          const c = changes[0] as { path?: string; kind?: string };
+          const shortPath = c.path
+            ? String(c.path)
+                .replace(/^\/Users\/[^/]+\/code\/[^/]+\//, '')
+                .replace(/^\/Users\/[^/]+\//, '~/')
+            : '';
+          return `${c.kind || 'update'} ${shortPath}`;
+        }
+        return `${changes.length} files`;
+      }
+
       default:
         return null;
     }
@@ -336,16 +390,22 @@ export const AgentChain = React.memo<AgentChainProps>(({ messages }) => {
     return getToolDisplayName(toolUse.name, toolUse.input);
   };
 
-  // Build ThoughtChain items
-  const thoughtChainItems: ThoughtChainProps['items'] = chainItems.map((item, _index) => {
+  // Build tool block items for rendering
+  const renderChainItem = (item: ChainItem, index: number) => {
     if (item.type === 'thought') {
       const thoughtContent = item.content as string;
+      const firstLine = thoughtContent.trim().split('\n')[0]?.slice(0, 120) || '';
+      const isTruncated = thoughtContent.trim().length > 120 || thoughtContent.includes('\n');
 
-      return {
-        title: 'Thinking',
-        // No status - thoughts are neutral, not success/error
-        ...(thoughtContent.trim() && {
-          content: (
+      return (
+        <ToolBlock
+          key={`thought-${index}`}
+          icon={<BulbOutlined style={{ fontSize: 14 }} />}
+          name="Thinking"
+          description={firstLine ? `${firstLine}${isTruncated ? '…' : ''}` : undefined}
+          status="success"
+        >
+          {thoughtContent.trim() && (
             <CollapsibleText
               maxLines={8}
               preserveWhitespace
@@ -357,169 +417,76 @@ export const AgentChain = React.memo<AgentChainProps>(({ messages }) => {
             >
               {thoughtContent}
             </CollapsibleText>
-          ),
-        }),
-      };
-    } else {
-      // Tool use
-      const { toolUse, toolResult } = item.content as {
-        toolUse: ToolUseBlock;
-        toolResult?: ToolResultBlock;
-      };
-      const isError = toolResult?.is_error;
-      const description = getToolDescription(toolUse);
-
-      // Build tooltip content with tool input parameters
-      const tooltipContent = (
-        <pre
-          key={toolUse.id}
-          style={{
-            margin: 0,
-            fontSize: 11,
-            maxWidth: 400,
-            maxHeight: 300,
-            overflow: 'auto',
-          }}
-        >
-          {JSON.stringify(toolUse.input, null, 2)}
-        </pre>
+          )}
+        </ToolBlock>
       );
+    }
 
-      // Determine status and icon
-      // Don't use 'success' or 'pending' status to avoid colored backgrounds from ThoughtChain
-      // Only use 'error' status for actual errors
-      const status = isError ? 'error' : undefined;
-      const icon = !toolResult ? (
-        <span key="loading" style={{ opacity: 1 }}>
-          <Spin size="small" />
-        </span>
-      ) : isError ? (
-        <CloseCircleOutlined key="error" style={{ fontSize: 14, color: token.colorError }} />
-      ) : (
-        <CheckCircleOutlined
-          key="success"
-          style={{ fontSize: 14, color: token.colorTextSecondary }}
-        />
-      );
+    // Tool use
+    const { toolUse, toolResult } = item.content as {
+      toolUse: ToolUseBlock;
+      toolResult?: ToolResultBlock;
+    };
+    const isError = toolResult?.is_error;
+    const displayName = resolveDisplayName(toolUse);
+    const isAlwaysExpanded = ALWAYS_EXPANDED_TOOLS.has(toolUse.name);
 
-      // Resolve display name (extracts inner tool name for MCP proxy tools)
-      const displayName = resolveDisplayName(toolUse);
+    // Status
+    const status: 'success' | 'error' | 'pending' = !toolResult
+      ? 'pending'
+      : isError
+        ? 'error'
+        : 'success';
 
-      // Build title with inline command/pattern for Bash, Grep, Glob
-      let titleContent: React.ReactNode;
-      if (toolUse.name === 'Bash' && toolUse.input.command) {
-        // For Bash, just show the tool name (command will be shown as description)
-        titleContent = (
-          <span>
-            <strong>Bash</strong>
-          </span>
-        );
-      } else if (toolUse.name === 'Grep' && toolUse.input.pattern) {
-        titleContent = (
-          <span style={{ cursor: 'help' }}>
-            <strong>Grep: </strong>
-            <Typography.Text code>{String(toolUse.input.pattern)}</Typography.Text>
-          </span>
-        );
-      } else if (toolUse.name === 'Glob' && toolUse.input.pattern) {
-        titleContent = (
-          <span style={{ cursor: 'help' }}>
-            <strong>Glob: </strong>
-            <Typography.Text code>{String(toolUse.input.pattern)}</Typography.Text>
-          </span>
-        );
+    // Icon
+    const icon = !toolResult ? (
+      <Spin size="small" />
+    ) : isError ? (
+      <CloseCircleOutlined style={{ fontSize: 14 }} />
+    ) : (
+      <CheckCircleOutlined style={{ fontSize: 14 }} />
+    );
+
+    // Description — key context for the tool call
+    let description = getToolDescription(toolUse);
+    let descriptionNode: React.ReactNode | undefined;
+
+    if (toolUse.name === 'Bash' && toolUse.input.command) {
+      const bashDesc = toolUse.input.description ? String(toolUse.input.description) : null;
+      if (bashDesc) {
+        description = bashDesc;
       } else {
-        // Default: tool name with optional description
-        // Uses resolved display name (inner tool name for MCP proxies)
-        titleContent = (
-          <span style={{ cursor: 'help' }}>
-            <strong>{displayName}</strong>
-            {description && <>: {description}</>}
-          </span>
-        );
-      }
-
-      // Additional details line for file operations and Bash commands
-      let detailsLine: React.ReactNode | null = null;
-      if (['Read', 'Write', 'Edit'].includes(toolUse.name) && toolUse.input.file_path) {
-        detailsLine = (
-          <Typography.Text code type="secondary" ellipsis>
-            {String(toolUse.input.file_path)}
+        const cmd = String(toolUse.input.command);
+        descriptionNode = (
+          <Typography.Text code ellipsis style={{ fontSize: token.fontSizeSM - 1 }}>
+            {cmd}
           </Typography.Text>
         );
-      } else if (toolUse.name === 'Bash' && toolUse.input.command) {
-        // Show Bash command as a code block (not ellipsis, allows wrapping)
-        const commandText = String(toolUse.input.command);
-        detailsLine = (
-          <CopyableContent
-            textContent={commandText}
-            copyTooltip="Copy command"
-            copyButtonOffset={{ top: token.sizeXXS, right: token.sizeXXS }}
-          >
-            <pre
-              style={{
-                margin: 0,
-                padding: `${token.sizeXXS}px ${token.sizeXS}px`,
-                background: token.colorBgLayout,
-                borderRadius: token.borderRadiusSM,
-                fontSize: token.fontSizeSM,
-                fontFamily: 'Monaco, Menlo, Ubuntu Mono, Consolas, source-code-pro, monospace',
-                color: token.colorTextSecondary,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-all',
-                maxWidth: '100%',
-              }}
-            >
-              {commandText}
-            </pre>
-          </CopyableContent>
-        );
+        description = null;
       }
-
-      // Build tooltip content - for Bash, include metadata like timeout, background, description
-      let finalTooltipContent: React.ReactNode = tooltipContent;
-      if (toolUse.name === 'Bash') {
-        const bashMetadata: string[] = [];
-        if (toolUse.input.description) {
-          bashMetadata.push(`Description: ${toolUse.input.description}`);
-        }
-        if (toolUse.input.timeout) {
-          bashMetadata.push(`Timeout: ${toolUse.input.timeout}ms`);
-        }
-        if (toolUse.input.run_in_background) {
-          bashMetadata.push('Running in background');
-        }
-
-        if (bashMetadata.length > 0) {
-          finalTooltipContent = (
-            <div>
-              <div style={{ marginBottom: 8, fontSize: 12, color: token.colorTextSecondary }}>
-                {bashMetadata.map((meta) => (
-                  <div key={meta}>{meta}</div>
-                ))}
-              </div>
-              {tooltipContent}
-            </div>
-          );
-        }
-      }
-
-      return {
-        title: (
-          <Tooltip title={finalTooltipContent} placement="right" mouseEnterDelay={0.3}>
-            {titleContent}
-          </Tooltip>
-        ),
-        description: detailsLine,
-        status,
-        icon,
-        // Only include content if we have a tool result
-        ...(toolResult && {
-          content: <ToolUseRenderer toolUse={toolUse} toolResult={toolResult} />,
-        }),
-      };
+    } else if ((toolUse.name === 'Grep' || toolUse.name === 'Glob') && toolUse.input.pattern) {
+      descriptionNode = (
+        <Typography.Text code style={{ fontSize: token.fontSizeSM - 1 }}>
+          {String(toolUse.input.pattern)}
+        </Typography.Text>
+      );
+      description = null;
     }
-  });
+
+    return (
+      <ToolBlock
+        key={toolUse.id}
+        icon={icon}
+        name={displayName}
+        description={description ?? undefined}
+        descriptionNode={descriptionNode}
+        status={status}
+        expandedByDefault={isAlwaysExpanded}
+      >
+        {toolResult && <ToolUseRenderer toolUse={toolUse} toolResult={toolResult} />}
+      </ToolBlock>
+    );
+  };
 
   // Summary section
   const summaryDescription = (
@@ -660,8 +627,16 @@ export const AgentChain = React.memo<AgentChainProps>(({ messages }) => {
 
       {/* Expanded chain */}
       {expanded && (
-        <div style={{ paddingLeft: token.sizeUnit * 8, marginTop: token.sizeUnit }}>
-          <ThoughtChain items={thoughtChainItems} />
+        <div
+          style={{
+            paddingLeft: token.sizeUnit * 8,
+            marginTop: token.sizeUnit,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+          }}
+        >
+          {chainItems.map(renderChainItem)}
         </div>
       )}
     </div>

@@ -59,6 +59,40 @@ export interface ContentBlock {
 }
 
 /**
+ * A single hunk from a structuredPatch diff computation.
+ * Used by executor diff enrichment and the UI diff viewer.
+ */
+export interface StructuredPatchHunk {
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  lines: string[];
+}
+
+/**
+ * Per-file diff data for multi-file tools (e.g. Codex edit_files).
+ */
+export interface FileDiff {
+  path: string;
+  kind: 'add' | 'update' | 'delete';
+  structuredPatch: StructuredPatchHunk[];
+}
+
+/**
+ * Diff enrichment data attached to tool_result content blocks.
+ * Computed best-effort by the executor for Edit/Write tool results.
+ *
+ * Single-file tools (Edit, Write) use `structuredPatch`.
+ * Multi-file tools (edit_files) use `files`.
+ */
+export interface DiffEnrichment {
+  structuredPatch: StructuredPatchHunk[];
+  /** Per-file diffs for multi-file tools like Codex edit_files */
+  files?: FileDiff[];
+}
+
+/**
  * Tool use in a message
  */
 export interface ToolUse {

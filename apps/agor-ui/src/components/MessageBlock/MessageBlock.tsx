@@ -11,6 +11,7 @@
 
 import {
   type ContentBlock as CoreContentBlock,
+  type DiffEnrichment,
   type InputRequestContent,
   InputRequestStatus,
   type Message,
@@ -19,12 +20,13 @@ import {
   PermissionStatus,
   type User,
 } from '@agor/core/types';
-import { RobotOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, CloseCircleOutlined, RobotOutlined } from '@ant-design/icons';
 import { Bubble } from '@ant-design/x';
-import { Tooltip, theme } from 'antd';
+import { Spin, Tooltip, theme } from 'antd';
 
 import type React from 'react';
 import { formatTimestampWithRelative } from '../../utils/time';
+import { getToolDisplayName } from '../../utils/toolDisplayName';
 import { AgorAvatar } from '../AgorAvatar';
 import { CollapsibleMarkdown } from '../CollapsibleText/CollapsibleMarkdown';
 import { CopyableContent } from '../CopyableContent';
@@ -32,6 +34,7 @@ import { InputRequestBlock } from '../InputRequestBlock';
 import { MarkdownRenderer } from '../MarkdownRenderer';
 import { PermissionRequestBlock } from '../PermissionRequestBlock';
 import { ThinkingBlock } from '../ThinkingBlock';
+import { ToolBlock } from '../ToolBlock';
 import { ToolIcon } from '../ToolIcon';
 import { ToolUseRenderer } from '../ToolUseRenderer';
 
@@ -47,6 +50,7 @@ interface ToolResultBlock {
   tool_use_id: string;
   content: string | CoreContentBlock[];
   is_error?: boolean;
+  diff?: DiffEnrichment;
 }
 
 interface TextBlock {
@@ -89,6 +93,66 @@ interface MessageBlockProps {
     answers: Record<string, string>,
     annotations?: Record<string, { markdown?: string; notes?: string }>
   ) => void;
+}
+
+/** Tools whose content is always shown expanded by default */
+const ALWAYS_EXPANDED_TOOLS = new Set(['Edit', 'Write', 'edit', 'write', 'edit_files']);
+
+/** Get short description for a tool call (file path, pattern, command, etc.) */
+function getToolDescription(toolUse: ToolUseBlock): string | undefined {
+  const { name, input } = toolUse;
+  if (typeof input.description === 'string') return input.description;
+  switch (name) {
+    case 'Read':
+    case 'Write':
+    case 'Edit':
+    case 'NotebookEdit':
+      return input.file_path ? String(input.file_path) : undefined;
+    case 'Bash':
+      return input.description
+        ? String(input.description)
+        : input.command
+          ? String(input.command)
+          : undefined;
+    case 'Grep':
+    case 'Glob':
+      return input.pattern ? String(input.pattern) : undefined;
+    case 'ToolSearch':
+    case 'WebSearch':
+      return input.query ? String(input.query) : undefined;
+    case 'WebFetch':
+      return input.url ? String(input.url) : undefined;
+    case 'Agent':
+      return input.description ? String(input.description) : undefined;
+    case 'Skill':
+    case 'SlashCommand':
+      return input.skill ? String(input.skill) : input.name ? String(input.name) : undefined;
+    case 'Task': {
+      if (!input.prompt) return undefined;
+      const firstLine = String(input.prompt).trim().split('\n')[0];
+      return firstLine.length > 100 ? `${firstLine.slice(0, 100)}…` : firstLine;
+    }
+    case 'TodoWrite': {
+      const todos = Array.isArray(input.todos) ? input.todos : [];
+      if (todos.length === 0) return undefined;
+      const done = todos.filter((t: { status?: string }) => t.status === 'completed').length;
+      const inProg = todos.filter((t: { status?: string }) => t.status === 'in_progress').length;
+      const parts = [`${done}/${todos.length} done`];
+      if (inProg > 0) parts.push(`${inProg} in progress`);
+      return parts.join(', ');
+    }
+    case 'edit_files': {
+      const changes = Array.isArray(input.changes) ? input.changes : [];
+      if (changes.length === 0) return undefined;
+      if (changes.length === 1) {
+        const c = changes[0] as { path?: string; kind?: string };
+        return `${c.kind || 'update'} ${c.path || ''}`;
+      }
+      return `${changes.length} files`;
+    }
+    default:
+      return undefined;
+  }
 }
 
 /**
@@ -517,10 +581,44 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({
 
       {/* Tools (compact, no bubble) */}
       {hasTools && (
-        <div style={{ margin: `${token.sizeUnit * 1.5}px 0` }}>
-          {toolBlocks.map(({ toolUse, toolResult }) => (
-            <ToolUseRenderer key={toolUse.id} toolUse={toolUse} toolResult={toolResult} />
-          ))}
+        <div
+          style={{
+            margin: `${token.sizeUnit * 1.5}px 0`,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+          }}
+        >
+          {toolBlocks.map(({ toolUse, toolResult }) => {
+            const isError = toolResult?.is_error;
+            const displayName = getToolDisplayName(toolUse.name, toolUse.input);
+            const isAlwaysExpanded = ALWAYS_EXPANDED_TOOLS.has(toolUse.name);
+            const status: 'success' | 'error' | 'pending' = !toolResult
+              ? 'pending'
+              : isError
+                ? 'error'
+                : 'success';
+            const icon = !toolResult ? (
+              <Spin size="small" />
+            ) : isError ? (
+              <CloseCircleOutlined style={{ fontSize: 14 }} />
+            ) : (
+              <CheckCircleOutlined style={{ fontSize: 14 }} />
+            );
+
+            return (
+              <ToolBlock
+                key={toolUse.id}
+                icon={icon}
+                name={displayName}
+                description={getToolDescription(toolUse)}
+                status={status}
+                expandedByDefault={isAlwaysExpanded}
+              >
+                {toolResult && <ToolUseRenderer toolUse={toolUse} toolResult={toolResult} />}
+              </ToolBlock>
+            );
+          })}
         </div>
       )}
 

@@ -25,9 +25,13 @@
  * See TEXT_TRUNCATION constants in src/constants/ui.ts for default limits.
  */
 
+import type { DiffEnrichment } from '@agor/core/types';
 import type React from 'react';
 import { BashRenderer } from './BashRenderer';
+import { EditFilesRenderer } from './EditFilesRenderer';
+import { EditRenderer } from './EditRenderer';
 import { TodoListRenderer } from './TodoListRenderer';
+import { WriteRenderer } from './WriteRenderer';
 
 /**
  * Props that all custom tool renderers receive
@@ -49,6 +53,8 @@ export interface ToolRendererProps {
   result?: {
     content: string | unknown[];
     is_error?: boolean;
+    /** Executor-enriched diff data (best-effort, may not be present) */
+    diff?: DiffEnrichment;
   };
 }
 
@@ -58,17 +64,35 @@ export interface ToolRendererProps {
 export type ToolRenderer = React.FC<ToolRendererProps>;
 
 /**
+ * Extract a human-readable error message from a tool result.
+ * Handles both string content and array-of-blocks content shapes.
+ */
+export function extractErrorMessage(result: ToolRendererProps['result']): string | undefined {
+  if (!result?.is_error) return undefined;
+  if (typeof result.content === 'string') return result.content;
+  if (Array.isArray(result.content)) {
+    return result.content
+      .filter((b): b is { type: 'text'; text: string } => {
+        const block = b as { type: string; text?: string };
+        return block.type === 'text';
+      })
+      .map((b) => b.text)
+      .join('\n');
+  }
+  return undefined;
+}
+
+/**
  * Registry of tool name -> custom renderer
  */
 export const TOOL_RENDERERS = new Map<string, ToolRenderer>([
   // Claude Code tools
   ['TodoWrite', TodoListRenderer as unknown as ToolRenderer],
   ['Bash', BashRenderer as unknown as ToolRenderer],
-
-  // Add more custom renderers here:
-  // ['Read', FileReadRenderer],
-  // ['Edit', FileEditRenderer],
-  // etc.
+  ['Edit', EditRenderer as unknown as ToolRenderer],
+  ['Write', WriteRenderer as unknown as ToolRenderer],
+  // Codex tools
+  ['edit_files', EditFilesRenderer as unknown as ToolRenderer],
 ]);
 
 /**
@@ -84,7 +108,11 @@ export function getToolRenderer(toolName: string): ToolRenderer | undefined {
   const exactMatch = TOOL_RENDERERS.get(toolName);
   if (exactMatch) return exactMatch;
 
-  // Try case-insensitive match by normalizing to PascalCase
-  const normalized = toolName.charAt(0).toUpperCase() + toolName.slice(1).toLowerCase();
-  return TOOL_RENDERERS.get(normalized);
+  // Try lowercase match (handles snake_case tools like edit_files)
+  const lower = toolName.toLowerCase();
+  for (const [key, renderer] of TOOL_RENDERERS) {
+    if (key.toLowerCase() === lower) return renderer;
+  }
+
+  return undefined;
 }
