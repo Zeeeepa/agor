@@ -12,6 +12,12 @@ import { z } from 'zod';
 import type { SessionsServiceImpl } from '../../declarations.js';
 import type { SessionParams } from '../../services/sessions.js';
 import { ensureCanPromptSession } from '../../utils/worktree-authorization.js';
+import {
+  resolveBoardId,
+  resolveMcpServerId,
+  resolveSessionId,
+  resolveWorktreeId,
+} from '../resolve-ids.js';
 import type { McpContext } from '../server.js';
 import { textResult } from '../server.js';
 
@@ -58,8 +64,8 @@ export function registerSessionTools(server: McpServer, ctx: McpContext): void {
       const requestedLimit = args.limit;
       if (!args.sessionType && requestedLimit) query.$limit = requestedLimit;
       if (args.status) query.status = args.status;
-      if (args.boardId) query.board_id = args.boardId;
-      if (args.worktreeId) query.worktree_id = args.worktreeId;
+      if (args.boardId) query.board_id = await resolveBoardId(ctx, args.boardId);
+      if (args.worktreeId) query.worktree_id = await resolveWorktreeId(ctx, args.worktreeId);
       if (args.archived === true) {
         query.archived = true;
       } else if (!args.includeArchived) {
@@ -476,13 +482,14 @@ export function registerSessionTools(server: McpServer, ctx: McpContext): void {
     },
     async (args) => {
       const mode = args.mode;
+      const sessionId = await resolveSessionId(ctx, args.sessionId);
 
       if (mode === 'continue') {
         const promptResponse = await ctx.app
           .service('/sessions/:id/prompt')
           .create(
             { prompt: args.prompt, stream: true },
-            { ...ctx.baseServiceParams, route: { id: args.sessionId } }
+            { ...ctx.baseServiceParams, route: { id: sessionId } }
           );
 
         if (promptResponse.queued) {
@@ -505,7 +512,7 @@ export function registerSessionTools(server: McpServer, ctx: McpContext): void {
 
         const forkedSession = await (
           ctx.app.service('sessions') as unknown as SessionsServiceImpl
-        ).fork(args.sessionId, forkData, ctx.baseServiceParams);
+        ).fork(sessionId, forkData, ctx.baseServiceParams);
 
         if (args.title) {
           await ctx.app
@@ -543,7 +550,7 @@ export function registerSessionTools(server: McpServer, ctx: McpContext): void {
 
         const childSession = await (
           ctx.app.service('sessions') as unknown as SessionsServiceImpl
-        ).spawn(args.sessionId, spawnData, ctx.baseServiceParams);
+        ).spawn(sessionId, spawnData, ctx.baseServiceParams);
 
         const promptResponse = await ctx.app.service('/sessions/:id/prompt').create(
           {
@@ -672,9 +679,10 @@ export function registerSessionTools(server: McpServer, ctx: McpContext): void {
 
       // MCP server inheritance: explicit param > worktree config > user defaults
       // An explicit empty array means "no MCPs" — does NOT fall through to worktree/user defaults.
+      // Resolve short IDs when from user input; worktree/user defaults are already full UUIDs.
       const mcpServerIds =
         args.mcpServerIds !== undefined
-          ? args.mcpServerIds
+          ? await Promise.all(args.mcpServerIds.map((id) => resolveMcpServerId(ctx, id)))
           : worktree.mcp_server_ids && worktree.mcp_server_ids.length > 0
             ? worktree.mcp_server_ids
             : userToolDefaults?.mcpServerIds || [];
@@ -708,7 +716,7 @@ export function registerSessionTools(server: McpServer, ctx: McpContext): void {
       }
 
       const sessionData: Record<string, unknown> = {
-        worktree_id: args.worktreeId,
+        worktree_id: worktree.worktree_id,
         agentic_tool: agenticTool,
         status: 'idle',
         title: args.title,
@@ -974,8 +982,8 @@ export function registerSessionTools(server: McpServer, ctx: McpContext): void {
       // Build service query for non-archived sessions
       const query: Record<string, unknown> = { archived: false };
       if (args.status) query.status = args.status;
-      if (args.boardId) query.board_id = args.boardId;
-      if (args.worktreeId) query.worktree_id = args.worktreeId;
+      if (args.boardId) query.board_id = await resolveBoardId(ctx, args.boardId);
+      if (args.worktreeId) query.worktree_id = await resolveWorktreeId(ctx, args.worktreeId);
 
       // Fetch all matching sessions (paginate through all results)
       const allSessions: Session[] = [];

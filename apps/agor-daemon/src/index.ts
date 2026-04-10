@@ -5194,7 +5194,7 @@ async function main() {
         console.log(`   Streaming: ${data.stream !== false}`);
         console.log(`   Message source: ${data.messageSource || 'not specified'}`);
 
-        const id = params.route?.id;
+        let id = params.route?.id;
         if (!id) throw new Error('Session ID required');
         if (!data.prompt) throw new Error('Prompt required');
 
@@ -5214,6 +5214,8 @@ async function main() {
 
         // Get session to find current message count
         let session = await sessionsService.get(id, params);
+        // Resolve short ID prefix to full UUID for all downstream operations
+        id = session.session_id;
 
         // Auto-unarchive on prompt: if someone prompts an archived session, they want it back
         if (session.archived) {
