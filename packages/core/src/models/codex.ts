@@ -5,7 +5,7 @@
  */
 
 /** Default Codex model */
-export const DEFAULT_CODEX_MODEL = 'gpt-5.3-codex';
+export const DEFAULT_CODEX_MODEL = 'gpt-5.4';
 
 /** Codex Mini model (GPT-5-Codex-Mini for cost-effective usage) */
 export const CODEX_MINI_MODEL = 'gpt-5-codex-mini';
@@ -19,10 +19,23 @@ export const CODEX_MINI_MODEL = 'gpt-5-codex-mini';
  * Uses `as const satisfies` to preserve literal key types for CodexModel.
  */
 const _CODEX_MODEL_METADATA = {
-  // GPT-5.3 models (newest)
+  // GPT-5.4 models (newest)
+  'gpt-5.4': {
+    name: 'GPT-5.4 (Recommended)',
+    description: 'Most capable model - unified coding, reasoning, and computer use',
+  },
+  'gpt-5.4-mini': {
+    name: 'GPT-5.4 Mini',
+    description: 'Smaller, faster GPT-5.4 variant',
+  },
+  // GPT-5.3 models
   'gpt-5.3-codex': {
-    name: 'GPT-5.3 Codex (Recommended)',
-    description: 'Most capable agentic coding model - stronger reasoning, 25% faster',
+    name: 'GPT-5.3 Codex',
+    description: 'Strong agentic coding model - stronger reasoning, 25% faster',
+  },
+  'gpt-5.3-codex-spark': {
+    name: 'GPT-5.3 Codex Spark',
+    description: 'Real-time coding model, 1000+ tokens/sec (Pro users)',
   },
   // GPT-5.2 models
   'gpt-5.2-codex': {
@@ -99,8 +112,12 @@ const DEFAULT_CODEX_CONTEXT_LIMIT = 200_000;
  * Values mirror OpenAI's public docs (Dec 2025) and fall back to 200k if unknown.
  */
 export const CODEX_CONTEXT_LIMITS: Record<string, number> = {
+  // GPT-5.4 models
+  'gpt-5.4': 1_050_000,
+  'gpt-5.4-mini': 400_000,
   // GPT-5.3 models
   'gpt-5.3-codex': 400_000,
+  'gpt-5.3-codex-spark': 128_000,
   // GPT-5.2 models (400k context, 128k max output)
   'gpt-5.2-codex': 400_000,
   'gpt-5.2': 400_000,
