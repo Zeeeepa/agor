@@ -199,7 +199,8 @@ async function saveOAuth21TokenToDB(
   mcpServerRepo: MCPServerRepository,
   serverId: string,
   token: string,
-  expiresInSeconds: number
+  expiresInSeconds: number,
+  refreshToken?: string
 ): Promise<void> {
   const expiresAt = Date.now() + (expiresInSeconds - 60) * 1000; // 60s buffer
   const server = await mcpServerRepo.findById(serverId);
@@ -217,11 +218,63 @@ async function saveOAuth21TokenToDB(
       type: 'oauth',
       oauth_access_token: token,
       oauth_token_expires_at: expiresAt,
+      ...(refreshToken ? { oauth_refresh_token: refreshToken } : {}),
     },
   });
   console.log(
-    `[OAuth 2.1 DB] Token saved for server ${serverId}, expires at ${new Date(expiresAt).toISOString()}`
+    `[OAuth 2.1 DB] Token saved for server ${serverId}, expires at ${new Date(expiresAt).toISOString()}${refreshToken ? ', with refresh token' : ''}`
   );
+}
+
+/**
+ * Cache + persist an OAuth token after a successful flow completion.
+ * Shared by both the callback handler and the manual oauth-complete service.
+ */
+async function persistOAuthToken(
+  // biome-ignore lint/suspicious/noExplicitAny: db type is complex (Drizzle instance), callers always pass the correct value
+  db: any,
+  tokenResponse: { access_token: string; expires_in?: number; refresh_token?: string },
+  cacheKey: string,
+  pendingFlow: {
+    mcpServerId?: string;
+    userId?: string;
+    oauthMode?: 'per_user' | 'shared';
+  },
+  logPrefix: string
+): Promise<void> {
+  const expiresIn = tokenResponse.expires_in ?? 3600;
+
+  // Cache the token at daemon level
+  cacheOAuth21Token(cacheKey, tokenResponse.access_token, expiresIn);
+
+  // Save to database based on OAuth mode
+  if (pendingFlow.mcpServerId) {
+    const oauthMode = pendingFlow.oauthMode || 'per_user';
+
+    if (oauthMode === 'per_user' && pendingFlow.userId) {
+      const userTokenRepo = new UserMCPOAuthTokenRepository(db);
+      await userTokenRepo.saveToken(
+        pendingFlow.userId as import('@agor/core/types').UserID,
+        pendingFlow.mcpServerId as import('@agor/core/types').MCPServerID,
+        tokenResponse.access_token,
+        expiresIn,
+        tokenResponse.refresh_token
+      );
+      console.log(
+        `[${logPrefix}] Per-user token saved for user ${pendingFlow.userId}, server ${pendingFlow.mcpServerId}`
+      );
+    } else {
+      const mcpServerRepo = new MCPServerRepository(db);
+      await saveOAuth21TokenToDB(
+        mcpServerRepo,
+        pendingFlow.mcpServerId,
+        tokenResponse.access_token,
+        expiresIn,
+        tokenResponse.refresh_token
+      );
+      console.log(`[${logPrefix}] Shared token saved for server ${pendingFlow.mcpServerId}`);
+    }
+  }
 }
 
 /**
@@ -1357,35 +1410,19 @@ async function main() {
 
       // Complete the flow
       const { completeMCPOAuthFlow } = await import('@agor/core/tools/mcp/oauth-mcp-transport');
-      const token = await completeMCPOAuthFlow(pendingFlow.context, code, state);
+      const tokenResponse = await completeMCPOAuthFlow(pendingFlow.context, code, state);
 
       // Remove from pending flows
       pendingOAuthFlows.delete(state);
 
-      // Cache the token at daemon level
-      cacheOAuth21Token(pendingFlow.context.metadataUrl, token, 3600);
-
-      // Save to database based on OAuth mode
-      if (pendingFlow.mcpServerId) {
-        const oauthMode = pendingFlow.oauthMode || 'per_user';
-
-        if (oauthMode === 'per_user' && pendingFlow.userId) {
-          const userTokenRepo = new UserMCPOAuthTokenRepository(db);
-          await userTokenRepo.saveToken(
-            pendingFlow.userId as import('@agor/core/types').UserID,
-            pendingFlow.mcpServerId as import('@agor/core/types').MCPServerID,
-            token,
-            3600
-          );
-          console.log(
-            `[OAuth Callback] Per-user token saved for user ${pendingFlow.userId}, server ${pendingFlow.mcpServerId}`
-          );
-        } else {
-          const mcpServerRepo = new MCPServerRepository(db);
-          await saveOAuth21TokenToDB(mcpServerRepo, pendingFlow.mcpServerId, token, 3600);
-          console.log(`[OAuth Callback] Shared token saved for server ${pendingFlow.mcpServerId}`);
-        }
-      }
+      // Cache + persist token
+      await persistOAuthToken(
+        db,
+        tokenResponse,
+        pendingFlow.context.metadataUrl,
+        pendingFlow,
+        'OAuth Callback'
+      );
 
       // Notify the initiating client that OAuth completed successfully
       if (app.io) {
@@ -1596,28 +1633,33 @@ async function main() {
                 }
               };
 
-              const token = await performMCPOAuthFlow(
+              const tokenResponse = await performMCPOAuthFlow(
                 wwwAuthenticate || '',
                 data.client_id, // Optional client_id
                 browserOpener, // Custom opener emits event to client
                 metadataUrl // Pre-discovered metadata URL (fallback for servers lacking resource_metadata)
               );
               console.log('[OAuth Test] OAuth flow completed, token obtained');
+              const testExpiresIn = tokenResponse.expires_in ?? 3600;
 
-              // Test the token against the MCP server
               // Cache the token at daemon level for discover endpoint to use
-              // Default to 1 hour if we don't have exact expiry (the transport caches with real expiry)
-              cacheOAuth21Token(data.mcp_url, token, 3600);
+              cacheOAuth21Token(data.mcp_url, tokenResponse.access_token, testExpiresIn);
 
               // Also save to database if we have a server ID (for cross-process access)
               if (data.mcp_server_id) {
-                await saveOAuth21TokenToDB(mcpServerRepo, data.mcp_server_id, token, 3600);
+                await saveOAuth21TokenToDB(
+                  mcpServerRepo,
+                  data.mcp_server_id,
+                  tokenResponse.access_token,
+                  testExpiresIn,
+                  tokenResponse.refresh_token
+                );
               }
 
               const testResponse = await fetch(data.mcp_url, {
                 method: 'POST',
                 headers: {
-                  Authorization: `Bearer ${token}`,
+                  Authorization: `Bearer ${tokenResponse.access_token}`,
                   Accept: 'application/json',
                   'Content-Type': 'application/json',
                 },
@@ -2092,39 +2134,19 @@ async function main() {
         }
 
         // Complete the flow
-        const token = await completeMCPOAuthFlow(pendingFlow.context, code, state);
+        const tokenResponse = await completeMCPOAuthFlow(pendingFlow.context, code, state);
 
         // Remove from pending flows
         pendingOAuthFlows.delete(state);
 
-        // Cache the token at daemon level
-        cacheOAuth21Token(pendingFlow.context.metadataUrl, token, 3600);
-
-        // Save to database based on OAuth mode
-        if (pendingFlow.mcpServerId) {
-          const oauthMode = pendingFlow.oauthMode || 'per_user';
-
-          if (oauthMode === 'per_user' && pendingFlow.userId) {
-            // Per-user mode: save to user_mcp_oauth_tokens table
-            const userTokenRepo = new UserMCPOAuthTokenRepository(db);
-            await userTokenRepo.saveToken(
-              pendingFlow.userId as import('@agor/core/types').UserID,
-              pendingFlow.mcpServerId as import('@agor/core/types').MCPServerID,
-              token,
-              3600 // 1 hour expiry
-            );
-            console.log(
-              `[OAuth Complete] Per-user token saved for user ${pendingFlow.userId}, server ${pendingFlow.mcpServerId}`
-            );
-          } else {
-            // Shared mode: save to MCP server's auth config
-            const mcpServerRepo = new MCPServerRepository(db);
-            await saveOAuth21TokenToDB(mcpServerRepo, pendingFlow.mcpServerId, token, 3600);
-            console.log(
-              `[OAuth Complete] Shared token saved for server ${pendingFlow.mcpServerId}`
-            );
-          }
-        }
+        // Cache + persist token
+        await persistOAuthToken(
+          db,
+          tokenResponse,
+          pendingFlow.context.metadataUrl,
+          pendingFlow,
+          'OAuth Complete'
+        );
 
         console.log('[OAuth Complete] Flow completed successfully');
 
@@ -2417,19 +2439,26 @@ async function main() {
                   `[MCP Discovery] OAuth 2.1 detected (${resolved.source}), starting browser flow...`
                 );
 
-                const token = await performMCPOAuthFlow(
+                const tokenResponse = await performMCPOAuthFlow(
                   wwwAuthenticate || '',
                   undefined,
                   openOAuthBrowser,
                   resolved.metadataUrl
                 );
+                const discoveryExpiresIn = tokenResponse.expires_in ?? 3600;
 
-                cacheOAuth21Token(mcpUrl, token, 3600);
+                cacheOAuth21Token(mcpUrl, tokenResponse.access_token, discoveryExpiresIn);
                 if (serverId) {
-                  await saveOAuth21TokenToDB(mcpServerRepo, serverId, token, 3600);
+                  await saveOAuth21TokenToDB(
+                    mcpServerRepo,
+                    serverId,
+                    tokenResponse.access_token,
+                    discoveryExpiresIn,
+                    tokenResponse.refresh_token
+                  );
                 }
 
-                return token;
+                return tokenResponse.access_token;
               }
             }
 

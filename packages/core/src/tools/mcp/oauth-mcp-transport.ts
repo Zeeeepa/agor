@@ -8,6 +8,7 @@
 
 import crypto from 'node:crypto';
 import http from 'node:http';
+import type { OAuthTokenResponse } from './oauth-auth.js';
 
 export interface OAuthMetadata {
   authorization_servers: string[];
@@ -77,13 +78,8 @@ export interface DynamicClientRegistrationResponse {
   client_name?: string;
 }
 
-export interface OAuthTokenResponse {
-  access_token: string;
-  token_type: string;
-  expires_in?: number;
-  refresh_token?: string;
-  scope?: string;
-}
+// Re-export the canonical OAuthTokenResponse from oauth-auth to avoid duplication
+export type { OAuthTokenResponse } from './oauth-auth.js';
 
 /**
  * Generate PKCE code verifier and challenge
@@ -259,8 +255,10 @@ async function registerDynamicClient(
     const errorText = await response.text();
     throw new Error(
       `Dynamic Client Registration failed (${response.status}): ${errorText}\n\n` +
-        'The MCP server may not support Dynamic Client Registration. ' +
-        'You may need to manually register an OAuth client and provide the client_id.'
+        'This MCP server does not support Dynamic Client Registration (RFC 7591). ' +
+        "You need to register an OAuth app in the provider's developer portal " +
+        '(e.g. figma.com/developers/apps for Figma) and enter the Client ID and ' +
+        'Client Secret in the MCP server configuration.'
     );
   }
 
@@ -574,7 +572,7 @@ export async function performMCPOAuthFlow(
   browserOpener?: (url: string) => void | Promise<void>,
   /** Pre-discovered resource metadata URL (used when WWW-Authenticate lacks resource_metadata) */
   resourceMetadataUrl?: string
-): Promise<string> {
+): Promise<OAuthTokenResponse> {
   console.log('[MCP OAuth] Starting OAuth 2.1 Authorization Code flow with PKCE');
 
   // Step 1: Parse WWW-Authenticate header, fall back to pre-discovered URL
@@ -594,7 +592,7 @@ export async function performMCPOAuthFlow(
   if (cached && cached.expiresAt > Date.now()) {
     const ttlRemaining = Math.floor((cached.expiresAt - Date.now()) / 1000);
     console.log(`[MCP OAuth] Using cached token (valid for ${ttlRemaining}s)`);
-    return cached.token;
+    return { access_token: cached.token, token_type: 'bearer', expires_in: ttlRemaining };
   }
 
   if (cached) {
@@ -669,8 +667,8 @@ export async function performMCPOAuthFlow(
           throw new Error(
             'OAuth client_id is required but the authorization server does not support ' +
               'Dynamic Client Registration.\n\n' +
-              'Please provide a client_id in the MCP server configuration, or contact the ' +
-              'server administrator to register an OAuth client.\n\n' +
+              "Register an OAuth app in the provider's developer portal and enter " +
+              'the Client ID (and Client Secret if required) in the MCP server configuration.\n\n' +
               `Server: ${authServerUrl}\n` +
               `Registration error: ${regError instanceof Error ? regError.message : String(regError)}`
           );
@@ -734,7 +732,7 @@ export async function performMCPOAuthFlow(
     console.log('[MCP OAuth] Access token received successfully');
 
     // Step 10: Cache token
-    const expiresInSeconds = tokenResponse.expires_in || DEFAULT_AUTHCODE_TOKEN_TTL_SECONDS;
+    const expiresInSeconds = tokenResponse.expires_in ?? DEFAULT_AUTHCODE_TOKEN_TTL_SECONDS;
     const expiresAt = Date.now() + (expiresInSeconds - EXPIRY_BUFFER_SECONDS) * 1000;
     const fetchedAt = Date.now();
 
@@ -748,7 +746,7 @@ export async function performMCPOAuthFlow(
       `[MCP OAuth] Token cached for ${expiresInSeconds}s (${EXPIRY_BUFFER_SECONDS}s buffer)`
     );
 
-    return tokenResponse.access_token;
+    return tokenResponse;
   } finally {
     // Always close callback server, even on error
     callback.server.close();
@@ -1030,7 +1028,8 @@ export async function startMCPOAuthFlow(
         throw new Error(
           'OAuth client_id is required but the authorization server does not support ' +
             'Dynamic Client Registration.\n\n' +
-            'Please provide a client_id in the MCP server configuration.'
+            "Register an OAuth app in the provider's developer portal and enter " +
+            'the Client ID (and Client Secret if required) in the MCP server configuration.'
         );
       }
     } else {
@@ -1109,7 +1108,7 @@ export async function completeMCPOAuthFlow(
   context: OAuthFlowContext,
   code: string,
   state: string
-): Promise<string> {
+): Promise<OAuthTokenResponse> {
   console.log('[MCP OAuth] Completing OAuth flow with authorization code');
   console.log('[MCP OAuth] Token endpoint:', context.tokenEndpoint);
   console.log('[MCP OAuth] Redirect URI:', context.redirectUri);
@@ -1134,7 +1133,7 @@ export async function completeMCPOAuthFlow(
   console.log('[MCP OAuth] Access token received successfully');
 
   // Cache token
-  const expiresInSeconds = tokenResponse.expires_in || DEFAULT_AUTHCODE_TOKEN_TTL_SECONDS;
+  const expiresInSeconds = tokenResponse.expires_in ?? DEFAULT_AUTHCODE_TOKEN_TTL_SECONDS;
   const expiresAt = Date.now() + (expiresInSeconds - EXPIRY_BUFFER_SECONDS) * 1000;
   const fetchedAt = Date.now();
 
@@ -1148,7 +1147,7 @@ export async function completeMCPOAuthFlow(
     `[MCP OAuth] Token cached for ${expiresInSeconds}s (${EXPIRY_BUFFER_SECONDS}s buffer)`
   );
 
-  return tokenResponse.access_token;
+  return tokenResponse;
 }
 
 /**
